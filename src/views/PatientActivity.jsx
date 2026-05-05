@@ -1,9 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import MainLayout from '../components/MainLayout'
 import avatar from '../assets/patient-avatar.png'
-import logo from '../assets/mpointe-3.svg'
 import { getPatientActivity, searchPatients } from '../services/patients'
-import { clearSession } from '../services/session'
 
 const actions = [
   'Charge',
@@ -31,47 +29,6 @@ function DotsButton({ label = 'More options' }) {
         <circle cx="14" cy="2" r="2" />
       </svg>
     </button>
-  )
-}
-
-function Header() {
-  const navigate = useNavigate()
-
-  function handleSignOut() {
-    clearSession()
-    navigate('/login', { replace: true })
-  }
-
-  return (
-    <header className="header">
-      <div className="flex-box flex-gap-small align-center--flex">
-        <button className="menu-button--header" type="button" aria-label="Menu">
-          <span className="hr-trigger-1" />
-          <span className="hr-trigger-2" />
-          <span className="hr-trigger-3" />
-        </button>
-
-        <div className="logo-wrap">
-          <img src={logo} loading="lazy" alt="MedPointe" className="img-logo" />
-        </div>
-
-        <div className="nav-primary">
-          <button
-            className="sign-out"
-            type="button"
-            title="Sign out"
-            onClick={handleSignOut}
-            aria-label="Sign out"
-          >
-            <span className="icon signout">
-              <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                <path d="M10.59 11L8.29 13.29a1 1 0 1 0 1.42 1.42l4-4a1 1 0 0 0 0-1.42l-4-4a1 1 0 1 0-1.42 1.42L10.59 9H1a1 1 0 1 0 0 2h9.59ZM10 0a10 10 0 1 0 9.96 11h-2.02A8 8 0 1 1 10 2V0Z" />
-              </svg>
-            </span>
-          </button>
-        </div>
-      </div>
-    </header>
   )
 }
 
@@ -394,12 +351,8 @@ export default function PatientActivity() {
   }
 
   return (
-    <div className="dashboard-page-wrapper">
-      <Header />
-
-      <section className="flex-box">
-        <main className="main">
-          <section id="patient-activity" className="pa-screen">
+    <MainLayout>
+      <section id="patient-activity" className="pa-screen">
             <form className="pa-accbar card" onSubmit={handleSearch}>
               <label htmlFor="pa-acc-input" className="acc-label">Account:</label>
               <div className="acc-group">
@@ -624,9 +577,7 @@ export default function PatientActivity() {
                 </section>
               </div>
             )}
-          </section>
-        </main>
       </section>
-    </div>
+    </MainLayout>
   )
 }
