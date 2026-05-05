@@ -18,15 +18,15 @@ function buildUrl(path, query) {
 }
 
 async function request(path, options = {}) {
-  const token = getStoredSession()
+  const session = getStoredSession()
   const headers = new Headers(options.headers)
 
   if (options.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
 
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`)
+  if (session?.accessToken) {
+    headers.set('Authorization', `Bearer ${session.accessToken}`)
   }
 
   const response = await fetch(buildUrl(path, options.query), {
