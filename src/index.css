@@ -521,7 +521,7 @@ a {
   width: 24px;
   height: 2px;
   border-radius: 3px;
-  background: var(--mp-green);
+  background: black;
   transition: transform 160ms ease, opacity 160ms ease;
 }
 
