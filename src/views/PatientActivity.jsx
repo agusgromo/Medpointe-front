@@ -82,7 +82,8 @@ function fullName(person) {
 }
 
 function searchResultName(patient) {
-  return [patient.firstName, patient.middleName, patient.lastName].filter(Boolean).join(' ')
+  const lastName = patient.lastName + ","
+  return [lastName, patient.middleName, patient.firstName].filter(Boolean).join(' ')
 }
 
 function humanize(value) {
