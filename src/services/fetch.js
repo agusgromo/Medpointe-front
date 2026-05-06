@@ -1,6 +1,7 @@
-import { getStoredSession } from "./session"
+import { clearSession, getStoredSession } from "./session"
 
 const API_BASE_URL = 'http://localhost:5046'
+const AUTH_ERROR_CODES = new Set(['EXPIRED_TOKEN', 'INVALID_TOKEN'])
 
 function buildUrl(path, query) {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`
@@ -36,6 +37,13 @@ async function request(path, options = {}) {
   })
 
   const data = await response.json().catch(() => null)
+
+  if (response.status === 401 && session?.accessToken && AUTH_ERROR_CODES.has(data?.code)) {
+    clearSession()
+    const loginUrl = new URL('/login', window.location.origin)
+    loginUrl.searchParams.set('authError', data.code)
+    window.location.replace(loginUrl.toString())
+  }
 
   if (!response.ok) {
     throw new Error(data?.message || 'The request could not be completed.')

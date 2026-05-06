@@ -1,14 +1,21 @@
 import { useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import logo from '../assets/mpointe-3.svg'
 import { loginUser } from '../services/auth'
 import { saveSession } from '../services/session'
 
+const AUTH_ERROR_MESSAGES = {
+  EXPIRED_TOKEN: 'Session has expired',
+  INVALID_TOKEN: 'Unauthorized access',
+}
+
 export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchParams] = useSearchParams()
+  const authError = searchParams.get('authError')
   const [credentials, setCredentials] = useState({ username: '', password: '' })
-  const [error, setError] = useState('')
+  const [error, setError] = useState(() => AUTH_ERROR_MESSAGES[authError] || '')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const redirectTo = location.state?.from?.pathname || '/'
