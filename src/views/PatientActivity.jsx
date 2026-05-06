@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import MainLayout from '../components/MainLayout'
 import avatar from '../assets/patient-avatar.png'
-import { getPatientActivity, searchPatients } from '../services/patients'
+import { createPatient, getPatientActivity, searchPatients } from '../services/patients'
 
 const actions = [
   'Charge',
@@ -19,6 +19,63 @@ const actions = [
 ]
 
 const overviewTabs = ['Demographics', 'Insurance', 'Clinical']
+
+const sexOptions = [
+  { value: '', label: 'Select' },
+  { value: 'female', label: 'Female' },
+  { value: 'male', label: 'Male' },
+  { value: 'unknown', label: 'Unknown' },
+]
+
+const maritalStatusOptions = [
+  { value: '', label: 'Select' },
+  { value: 'single', label: 'Single' },
+  { value: 'married', label: 'Married' },
+  { value: 'divorced', label: 'Divorced' },
+  { value: 'widowed', label: 'Widowed' },
+]
+
+const employmentStatusOptions = [
+  { value: '', label: 'Select' },
+  { value: 'employed', label: 'Employed' },
+  { value: 'unemployed', label: 'Unemployed' },
+  { value: 'retired', label: 'Retired' },
+  { value: 'student', label: 'Student' },
+]
+
+const communicationOptions = [
+  { value: '', label: 'Select' },
+  { value: 'mobile', label: 'Mobile' },
+  { value: 'home_phone', label: 'Home phone' },
+  { value: 'email', label: 'Email' },
+  { value: 'mail', label: 'Mail' },
+]
+
+const emptyPatientForm = {
+  firstName: '',
+  middleName: '',
+  lastName: '',
+  suffix: '',
+  nickname: '',
+  dateOfBirth: '',
+  sexAtBirth: '',
+  genderIdentity: '',
+  pronouns: '',
+  maritalStatus: '',
+  employmentStatus: '',
+  preferredLanguage: 'English',
+  ethnicity: '',
+  addressLine1: '',
+  addressLine2: '',
+  city: '',
+  state: '',
+  postalCode: '',
+  homePhone: '',
+  workPhone: '',
+  mobilePhone: '',
+  email: '',
+  communicationPreference: '',
+}
 
 function DotsButton({ label = 'More options' }) {
   return (
@@ -252,6 +309,193 @@ function CompactList({ items, renderItem, empty }) {
   return <div className="pa-compact-list">{items.slice(0, 6).map(renderItem)}</div>
 }
 
+function AddPatientModal({ onClose, onCreated }) {
+  const [form, setForm] = useState(emptyPatientForm)
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  function updateField(event) {
+    const { name, value } = event.target
+
+    setForm((current) => ({
+      ...current,
+      [name]: value,
+    }))
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+    setError('')
+    setSubmitting(true)
+
+    try {
+      const createdPatient = await createPatient(form)
+      onCreated(createdPatient)
+    } catch (error) {
+      setError(error.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="pa-modal-backdrop" role="presentation">
+      <section className="pa-modal" role="dialog" aria-modal="true" aria-labelledby="add-patient-title">
+        <form onSubmit={handleSubmit}>
+          <div className="pa-modal-head">
+            <div>
+              <h2 id="add-patient-title">Add Patient</h2>
+              <p>New patient demographics</p>
+            </div>
+            <button className="btn-icon" type="button" aria-label="Close" onClick={onClose}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="2" />
+              </svg>
+            </button>
+          </div>
+
+          {error ? <div className="pa-message">{error}</div> : null}
+
+          <div className="pa-modal-body">
+            <fieldset>
+              <legend>Identity</legend>
+              <div className="pa-form-grid">
+                <label>
+                  <span>First Name</span>
+                  <input className="w-input" name="firstName" value={form.firstName} onChange={updateField} required />
+                </label>
+                <label>
+                  <span>Middle</span>
+                  <input className="w-input" name="middleName" value={form.middleName} onChange={updateField} maxLength="1" />
+                </label>
+                <label>
+                  <span>Last Name</span>
+                  <input className="w-input" name="lastName" value={form.lastName} onChange={updateField} required />
+                </label>
+                <label>
+                  <span>Suffix</span>
+                  <input className="w-input" name="suffix" value={form.suffix} onChange={updateField} />
+                </label>
+                <label>
+                  <span>Date of Birth</span>
+                  <input className="w-input" name="dateOfBirth" type="date" value={form.dateOfBirth} onChange={updateField} required />
+                </label>
+                <label>
+                  <span>Sex</span>
+                  <select className="w-input" name="sexAtBirth" value={form.sexAtBirth} onChange={updateField} required>
+                    {sexOptions.map((option) => (
+                      <option value={option.value} key={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Nickname</span>
+                  <input className="w-input" name="nickname" value={form.nickname} onChange={updateField} />
+                </label>
+                <label>
+                  <span>Preferred Language</span>
+                  <input className="w-input" name="preferredLanguage" value={form.preferredLanguage} onChange={updateField} />
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Contact</legend>
+              <div className="pa-form-grid">
+                <label className="span-2">
+                  <span>Address</span>
+                  <input className="w-input" name="addressLine1" value={form.addressLine1} onChange={updateField} />
+                </label>
+                <label>
+                  <span>Address 2</span>
+                  <input className="w-input" name="addressLine2" value={form.addressLine2} onChange={updateField} />
+                </label>
+                <label>
+                  <span>City</span>
+                  <input className="w-input" name="city" value={form.city} onChange={updateField} />
+                </label>
+                <label>
+                  <span>State</span>
+                  <input className="w-input" name="state" value={form.state} onChange={updateField} maxLength="2" />
+                </label>
+                <label>
+                  <span>Zip</span>
+                  <input className="w-input" name="postalCode" value={form.postalCode} onChange={updateField} />
+                </label>
+                <label>
+                  <span>Mobile</span>
+                  <input className="w-input" name="mobilePhone" value={form.mobilePhone} onChange={updateField} />
+                </label>
+                <label>
+                  <span>Home</span>
+                  <input className="w-input" name="homePhone" value={form.homePhone} onChange={updateField} />
+                </label>
+                <label>
+                  <span>Work</span>
+                  <input className="w-input" name="workPhone" value={form.workPhone} onChange={updateField} />
+                </label>
+                <label>
+                  <span>Email</span>
+                  <input className="w-input" name="email" type="email" value={form.email} onChange={updateField} />
+                </label>
+                <label>
+                  <span>Preference</span>
+                  <select className="w-input" name="communicationPreference" value={form.communicationPreference} onChange={updateField}>
+                    {communicationOptions.map((option) => (
+                      <option value={option.value} key={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Other</legend>
+              <div className="pa-form-grid">
+                <label>
+                  <span>Marital Status</span>
+                  <select className="w-input" name="maritalStatus" value={form.maritalStatus} onChange={updateField}>
+                    {maritalStatusOptions.map((option) => (
+                      <option value={option.value} key={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Employment</span>
+                  <select className="w-input" name="employmentStatus" value={form.employmentStatus} onChange={updateField}>
+                    {employmentStatusOptions.map((option) => (
+                      <option value={option.value} key={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Ethnicity</span>
+                  <input className="w-input" name="ethnicity" value={form.ethnicity} onChange={updateField} />
+                </label>
+                <label>
+                  <span>Gender Identity</span>
+                  <input className="w-input" name="genderIdentity" value={form.genderIdentity} onChange={updateField} />
+                </label>
+                <label>
+                  <span>Pronouns</span>
+                  <input className="w-input" name="pronouns" value={form.pronouns} onChange={updateField} />
+                </label>
+              </div>
+            </fieldset>
+          </div>
+
+          <div className="pa-modal-actions">
+            <button className="btn-outline" type="button" onClick={onClose}>Cancel</button>
+            <button className="w-button pa-submit" type="submit" disabled={submitting}>
+              {submitting ? 'Saving' : 'Save Patient'}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  )
+}
+
 export default function PatientActivity() {
   const [accountValue, setAccountValue] = useState('')
   const [activity, setActivity] = useState(null)
@@ -259,6 +503,7 @@ export default function PatientActivity() {
   const [activeTab, setActiveTab] = useState('Demographics')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
+  const [isAddPatientOpen, setIsAddPatientOpen] = useState(false)
   const inputRef = useRef(null)
 
   const patient = activity?.patient
@@ -350,6 +595,11 @@ export default function PatientActivity() {
     }
   }
 
+  async function handlePatientCreated(createdPatient) {
+    setIsAddPatientOpen(false)
+    await loadActivity(createdPatient.id)
+  }
+
   return (
     <MainLayout>
       <section id="patient-activity" className="pa-screen">
@@ -384,7 +634,7 @@ export default function PatientActivity() {
                   </svg>
                   <span>Patient search</span>
                 </button>
-                <button className="btn-outline acc-btn" title="Add patient" type="button">
+                <button className="btn-outline acc-btn" title="Add patient" type="button" onClick={() => setIsAddPatientOpen(true)}>
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" strokeWidth="2" />
                   </svg>
@@ -398,6 +648,13 @@ export default function PatientActivity() {
                 </button>
               </div>
             </form>
+
+            {isAddPatientOpen ? (
+              <AddPatientModal
+                onClose={() => setIsAddPatientOpen(false)}
+                onCreated={handlePatientCreated}
+              />
+            ) : null}
 
             {message ? <div className="pa-message">{message}</div> : null}
 

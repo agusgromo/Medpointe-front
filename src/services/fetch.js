@@ -45,10 +45,6 @@ async function request(path, options = {}) {
     window.location.replace(loginUrl.toString())
   }
 
-  if (!response.ok) {
-    throw new Error(data?.message || 'The request could not be completed.')
-  }
-
   return data
 }
 

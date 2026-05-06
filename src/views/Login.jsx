@@ -59,7 +59,7 @@ export default function Login() {
       <section className="panel" aria-labelledby="login-title">
         <div className="panel-inner">
           <div className="brand">
-            <img src={logo} alt="MedPointe" />
+            <img className="block h-full w-full" src={logo} alt="MedPointe" />
           </div>
 
           <h2 className="title" id="login-title">
@@ -68,8 +68,8 @@ export default function Login() {
           <p className="subtitle">Enter your credentials to access the dashboard.</p>
 
           <form onSubmit={handleSubmit}>
-            <label className="field user">
-              <span className="icon">
+            <label className="mx-auto mb-6 flex h-[63px] w-[498px] max-w-[90%] items-center gap-3 rounded-[31.5px] border border-[#9491b6] bg-white px-[18px] max-[1200px]:w-[480px] max-[980px]:mb-5 max-[980px]:w-full max-[980px]:max-w-[520px] max-[640px]:h-14 max-[640px]:px-4 max-[400px]:h-[52px] max-[400px]:gap-2.5 max-[400px]:px-3.5 [@media(max-height:600px)_and_(orientation:landscape)]:mb-4 [@media(max-height:600px)_and_(orientation:landscape)]:h-12">
+              <span className="inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center text-[#9491b6]">
                 <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
                   <path
                     d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5Zm7 9a7 7 0 0 0-14 0"
@@ -80,7 +80,7 @@ export default function Login() {
                 </svg>
               </span>
               <input
-                className="pill-input"
+                className="h-10 min-w-0 flex-1 appearance-none border-0 bg-transparent text-xl text-[#425166] outline-0 placeholder:text-[#9491b6] max-[640px]:text-lg max-[400px]:text-base max-[360px]:text-[15px]"
                 name="username"
                 type="text"
                 value={credentials.username}
@@ -92,8 +92,8 @@ export default function Login() {
               />
             </label>
 
-            <label className="field pass">
-              <span className="icon">
+            <label className="mx-auto mb-6 flex h-[63px] w-[498px] max-w-[90%] items-center gap-3 rounded-[31.5px] border border-[#9491b6] bg-white px-[18px] max-[1200px]:w-[480px] max-[980px]:mb-5 max-[980px]:w-full max-[980px]:max-w-[520px] max-[640px]:h-14 max-[640px]:px-4 max-[400px]:h-[52px] max-[400px]:gap-2.5 max-[400px]:px-3.5 [@media(max-height:600px)_and_(orientation:landscape)]:mb-4 [@media(max-height:600px)_and_(orientation:landscape)]:h-12">
+              <span className="inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center text-[#9491b6]">
                 <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
                   <rect
                     x="3"
@@ -114,7 +114,7 @@ export default function Login() {
                 </svg>
               </span>
               <input
-                className="pill-input"
+                className="h-10 min-w-0 flex-1 appearance-none border-0 bg-transparent text-xl text-[#425166] outline-0 placeholder:text-[#9491b6] max-[640px]:text-lg max-[400px]:text-base max-[360px]:text-[15px]"
                 name="password"
                 type={showPassword ? 'text' : 'password'}
                 value={credentials.password}
@@ -125,6 +125,7 @@ export default function Login() {
               />
               <button
                 id="lg-toggle"
+                className="cursor-pointer border-0 bg-transparent px-0 py-2 text-base font-semibold text-[#2b66da] max-[400px]:py-1.5 max-[400px]:text-sm"
                 type="button"
                 onClick={() => setShowPassword((current) => !current)}
               >
@@ -132,13 +133,13 @@ export default function Login() {
               </button>
             </label>
 
-            <div className="forgot">Forgot your password?</div>
+            <div className="my-[18px] text-center text-lg italic text-[#9491b6] max-[640px]:my-3.5 max-[640px]:text-base max-[400px]:text-[15px] [@media(max-height:600px)_and_(orientation:landscape)]:my-3 [@media(max-height:600px)_and_(orientation:landscape)]:text-sm">Forgot your password?</div>
 
-            <button className="btn" type="submit" disabled={isSubmitting}>
+            <button className="mx-auto my-6 block h-[63px] w-[498px] max-w-[90%] cursor-pointer rounded-[31.5px] border-0 bg-[#4190f5] text-[22px] font-semibold text-white shadow-[0_10px_18px_rgba(65,144,245,0.25)] disabled:cursor-default disabled:opacity-60 max-[980px]:w-full max-[980px]:max-w-[520px] max-[640px]:h-14 max-[640px]:text-xl max-[400px]:h-[52px] max-[400px]:text-lg [@media(max-height:600px)_and_(orientation:landscape)]:my-4 [@media(max-height:600px)_and_(orientation:landscape)]:h-12" type="submit" disabled={isSubmitting}>
               {isSubmitting ? 'Signing in' : 'Login'}
             </button>
 
-            <div id="lg-message" role="status">
+            <div id="lg-message" className="mx-5 my-4 min-h-[22px] text-center text-[15px] text-[#b91c1c] max-[400px]:text-sm" role="status">
               {error}
             </div>
           </form>
