@@ -8,6 +8,10 @@ export function getPatientActivity(patientId) {
   return GET(`/patient/${patientId}/activity`)
 }
 
+export function getLanguages() {
+  return GET('/languages')
+}
+
 export function createPatient(patient) {
   return POST('/patient', patient)
 }
