@@ -1,7 +1,7 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import MainLayout from '../components/MainLayout'
 import avatar from '../assets/patient-avatar.png'
-import { createPatient, getPatientActivity, searchPatients } from '../services/patients'
+import { createPatient, getLanguages, getPatientActivity, searchPatients } from '../services/patients'
 
 const actions = [
   'Charge',
@@ -63,7 +63,7 @@ const emptyPatientForm = {
   pronouns: '',
   maritalStatus: '',
   employmentStatus: '',
-  preferredLanguage: 'English',
+  preferredLanguageId: '',
   ethnicity: '',
   addressLine1: '',
   addressLine2: '',
@@ -310,10 +310,12 @@ function CompactList({ items, renderItem, empty }) {
   return <div className="pa-compact-list">{items.slice(0, 6).map(renderItem)}</div>
 }
 
-function AddPatientModal({ onClose, onCreated }) {
+function AddPatientModal({ languages, onClose, onCreated }) {
   const [form, setForm] = useState(emptyPatientForm)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const defaultLanguageId = languages.find((language) => language.name?.toLowerCase() === 'english')?.id ?? languages[0]?.id ?? ''
+  const selectedLanguageId = form.preferredLanguageId || (defaultLanguageId ? String(defaultLanguageId) : '')
 
   function updateField(event) {
     const { name, value } = event.target
@@ -330,7 +332,10 @@ function AddPatientModal({ onClose, onCreated }) {
     setSubmitting(true)
 
     try {
-      const createdPatient = await createPatient(form)
+      const createdPatient = await createPatient({
+        ...form,
+        preferredLanguageId: selectedLanguageId ? Number(selectedLanguageId) : null,
+      })
       onCreated(createdPatient)
     } catch (error) {
       setError(error.message)
@@ -395,7 +400,12 @@ function AddPatientModal({ onClose, onCreated }) {
                 </label>
                 <label>
                   <span>Preferred Language</span>
-                  <input className="w-input" name="preferredLanguage" value={form.preferredLanguage} onChange={updateField} />
+                  <select className="w-input" name="preferredLanguageId" value={selectedLanguageId} onChange={updateField} required>
+                    <option value="">Select</option>
+                    {languages.map((language) => (
+                      <option value={language.id} key={language.id}>{language.name}</option>
+                    ))}
+                  </select>
                 </label>
               </div>
             </fieldset>
@@ -505,12 +515,41 @@ export default function PatientActivity() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [isAddPatientOpen, setIsAddPatientOpen] = useState(false)
+  const [languages, setLanguages] = useState([])
   const inputRef = useRef(null)
 
   const patient = activity?.patient
   const contact = activity?.contact
   const activeInsurance = activity?.insurancePolicies?.find((policy) => policy.isActive) || activity?.insurancePolicies?.[0]
   const latestNote = activity?.notes?.[0]
+
+  useEffect(() => {
+    let isCurrent = true
+
+    async function loadLanguages() {
+      try {
+        const response = await getLanguages()
+        if (isCurrent) {
+          if (Array.isArray(response)) {
+            setLanguages(response)
+          } else {
+            setLanguages([])
+            setMessage(response?.message || 'Unable to load languages.')
+          }
+        }
+      } catch (error) {
+        if (isCurrent) {
+          setMessage(error.message || 'Unable to load languages.')
+        }
+      }
+    }
+
+    loadLanguages()
+
+    return () => {
+      isCurrent = false
+    }
+  }, [])
 
   const keyInfo = useMemo(() => ([
     ['Account', patient?.id],
@@ -652,6 +691,7 @@ export default function PatientActivity() {
 
             {isAddPatientOpen ? (
               <AddPatientModal
+                languages={languages}
                 onClose={() => setIsAddPatientOpen(false)}
                 onCreated={handlePatientCreated}
               />
