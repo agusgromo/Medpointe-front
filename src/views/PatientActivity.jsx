@@ -529,31 +529,21 @@ export default function PatientActivity() {
   const latestNote = activity?.notes?.[0]
 
   useEffect(() => {
-    let isCurrent = true
-
     async function loadLanguages() {
       try {
         const response = await getLanguages()
-        if (isCurrent) {
-          if (Array.isArray(response)) {
-            setLanguages(response)
-          } else {
-            setLanguages([])
-            setMessage(response?.message || 'Unable to load languages.')
-          }
+        if (Array.isArray(response.data)) {
+          setLanguages(response.data)
+        } else {
+          setLanguages([])
+          setMessage(response?.message || 'Unable to load languages.')
         }
       } catch (error) {
-        if (isCurrent) {
-          setMessage(error.message || 'Unable to load languages.')
-        }
+        setMessage(error.message || 'Unable to load languages.')
       }
     }
 
     loadLanguages()
-
-    return () => {
-      isCurrent = false
-    }
   }, [])
 
   const keyInfo = useMemo(() => ([
@@ -694,13 +684,13 @@ export default function PatientActivity() {
           </div>
         </form>
 
-            {isAddPatientOpen ? (
-              <AddPatientModal
-                languages={languages}
-                onClose={() => setIsAddPatientOpen(false)}
-                onCreated={handlePatientCreated}
-              />
-            ) : null}
+        {isAddPatientOpen ? (
+          <AddPatientModal
+            languages={languages}
+            onClose={() => setIsAddPatientOpen(false)}
+            onCreated={handlePatientCreated}
+          />
+        ) : null}
 
         {message ? <div className="pa-message">{message}</div> : null}
 
