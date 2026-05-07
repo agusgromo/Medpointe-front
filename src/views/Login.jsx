@@ -37,9 +37,12 @@ export default function Login() {
         username: credentials.username.trim(),
         password: credentials.password,
       })
-
-      saveSession(session)
-      navigate(redirectTo, { replace: true })
+      if (session.status != 200)
+        setError(session.data.message)
+      else{
+        saveSession(session.data)
+        navigate(redirectTo, { replace: true })
+      }
     } catch (error) {
       setError(error.message)
     } finally {

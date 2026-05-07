@@ -45,7 +45,10 @@ async function request(path, options = {}) {
     window.location.replace(loginUrl.toString())
   }
 
-  return data
+  return {
+    status: response.status,
+    data
+  }
 }
 
 export function GET(path, query) {

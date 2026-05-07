@@ -244,6 +244,9 @@ function OverviewRows({ tab, activity }) {
     Demographics: [
       ['Full name', fullName(patient)],
       ['Address', addressText(contact)],
+      ['Date of birth', formatDate(patient?.dateOfBirth)],
+      ['Sex', patient?.sexAtBirth],
+      ['Gender Identity', patient?.genderIdentity],
       ['Language', patient?.preferredLanguage],
       ['Marital status', humanize(patient?.maritalStatus)],
       ['Employment', humanize(patient?.employmentStatus)],
@@ -331,7 +334,8 @@ function AddPatientModal({ onClose, onCreated }) {
 
     try {
       const createdPatient = await createPatient(form)
-      onCreated(createdPatient)
+      if (createdPatient.status === 201) onCreated(createdPatient.data)
+      else setError(createdPatient.data.message)
     } catch (error) {
       setError(error.message)
     } finally {
@@ -552,10 +556,10 @@ export default function PatientActivity() {
     setMessage('')
 
     try {
-      const data = await getPatientActivity(patientId)
-      setActivity(data)
+      const response = await getPatientActivity(patientId)
+      setActivity(response.data)
       setSearchResults([])
-      setAccountValue(String(data.patient.id))
+      setAccountValue(String(response.data.patient.id))
     } catch (error) {
       setMessage(error.message)
     } finally {
@@ -582,13 +586,15 @@ export default function PatientActivity() {
 
     try {
       const results = await searchPatients(query)
-      setSearchResults(results)
-
-      if (results.length === 1) {
-        await loadActivity(results[0].id)
-      } else if (results.length === 0) {
-        setMessage('No matching patients found.')
+      if (results.status === 200) {
+        setSearchResults(results.data)
+        if (results.data.length === 1) {
+          await loadActivity(results.data[0].id)
+        } else if (results.data.length === 0) {
+          setMessage('No matching patients found.')
+        }
       }
+      else setMessage(results.message)
     } catch (error) {
       setMessage(error.message)
     } finally {
@@ -597,6 +603,7 @@ export default function PatientActivity() {
   }
 
   async function handlePatientCreated(createdPatient) {
+    console.log(createdPatient)
     setIsAddPatientOpen(false)
     await loadActivity(createdPatient.id)
   }
@@ -604,237 +611,237 @@ export default function PatientActivity() {
   return (
     <MainLayout>
       <section id="patient-activity" className="pa-screen">
-            <form className="pa-accbar card" onSubmit={handleSearch}>
-              <label htmlFor="pa-acc-input" className="acc-label">Account:</label>
-              <div className="acc-group">
-                <input
-                  ref={inputRef}
-                  id="pa-acc-input"
-                  className="w-input acc-input"
-                  type="text"
-                  value={accountValue}
-                  onChange={(event) => setAccountValue(event.target.value)}
-                  placeholder="ID or name..."
-                />
-                <button id="pa-acc-go" className="w-button acc-go" type="submit" disabled={loading}>
-                  {loading ? 'Loading' : 'Go'}
-                </button>
+        <form className="pa-accbar card" onSubmit={handleSearch}>
+          <label htmlFor="pa-acc-input" className="acc-label">Account:</label>
+          <div className="acc-group">
+            <input
+              ref={inputRef}
+              id="pa-acc-input"
+              className="w-input acc-input"
+              type="text"
+              value={accountValue}
+              onChange={(event) => setAccountValue(event.target.value)}
+              placeholder="ID or name..."
+            />
+            <button id="pa-acc-go" className="w-button acc-go" type="submit" disabled={loading}>
+              {loading ? 'Loading' : 'Go'}
+            </button>
+          </div>
+
+          <div className="acc-actions">
+            <button className="btn-outline acc-btn" title="Switch patients" type="button" onClick={() => setActivity(null)}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 7h13M17 3l4 4-4 4M17 17H4M7 13l-4 4 4 4" fill="none" stroke="currentColor" strokeWidth="2" />
+              </svg>
+              <span>Switch patients</span>
+            </button>
+            <button className="btn-outline acc-btn" title="Patient search" type="button" onClick={handleSearch}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" strokeWidth="2" />
+                <path d="m16 16 5 5" fill="none" stroke="currentColor" strokeWidth="2" />
+              </svg>
+              <span>Patient search</span>
+            </button>
+            <button className="btn-outline acc-btn" title="Add patient" type="button" onClick={() => setIsAddPatientOpen(true)}>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" strokeWidth="2" />
+              </svg>
+              <span>Add patient</span>
+            </button>
+            <button className="btn-outline acc-btn" title="Alert" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 3 2 21h20L12 3zM12 9v5M12 17h.01" fill="none" stroke="currentColor" strokeWidth="2" />
+              </svg>
+              <span>Alert</span>
+            </button>
+          </div>
+        </form>
+
+        {isAddPatientOpen ? (
+          <AddPatientModal
+            onClose={() => setIsAddPatientOpen(false)}
+            onCreated={handlePatientCreated}
+          />
+        ) : null}
+
+        {message ? <div className="pa-message">{message}</div> : null}
+
+        {searchResults.length > 1 ? (
+          <div className="pa-search-results">
+            {searchResults.map((result) => (
+              <button type="button" className="pa-search-row" key={result.id} onClick={() => loadActivity(result.id)}>
+                <span className="pa-search-name">{searchResultName(result)}</span>
+                <span>{formatDate(result.dateOfBirth)} | {humanize(result.sexAtBirth)} | #{result.id}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {!activity ? (
+          <div className="pa-start pa-card">
+            <div className="pa-start-title">Patient Activity</div>
+            <div className="pa-start-subtitle">Enter a patient id or search by last name.</div>
+          </div>
+        ) : (
+          <div className="pa-grid">
+            <aside className="pa-col-left">
+              <div className="pa-card pi-card">
+                <div className="pi-head">
+                  <div className="pi-title">Patient Information</div>
+                  <DotsButton />
+                </div>
+
+                <div className="pi-photo-wrap">
+                  <div
+                    className="pi-photo"
+                    aria-label="Patient"
+                    style={{ backgroundImage: `url(${avatar})` }}
+                  />
+                </div>
+
+                <div className="pi-name">{fullName(patient)}</div>
+                <div className="pi-meta">
+                  <div>Acct: <b>{patient.id}</b> <span className="sep">-</span> Sex: <b>{humanize(patient.sexAtBirth)}</b></div>
+                  <div>DOB: <b>{formatDate(patient.dateOfBirth)}</b> <span className="sep">-</span> Age: <b>{ageText(patient.dateOfBirth)}</b></div>
+                </div>
               </div>
 
-              <div className="acc-actions">
-                <button className="btn-outline acc-btn" title="Switch patients" type="button" onClick={() => setActivity(null)}>
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M7 7h13M17 3l4 4-4 4M17 17H4M7 13l-4 4 4 4" fill="none" stroke="currentColor" strokeWidth="2" />
-                  </svg>
-                  <span>Switch patients</span>
-                </button>
-                <button className="btn-outline acc-btn" title="Patient search" type="button" onClick={handleSearch}>
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" strokeWidth="2" />
-                    <path d="m16 16 5 5" fill="none" stroke="currentColor" strokeWidth="2" />
-                  </svg>
-                  <span>Patient search</span>
-                </button>
-                <button className="btn-outline acc-btn" title="Add patient" type="button" onClick={() => setIsAddPatientOpen(true)}>
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" strokeWidth="2" />
-                  </svg>
-                  <span>Add patient</span>
-                </button>
-                <button className="btn-outline acc-btn" title="Alert" type="button">
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="M12 3 2 21h20L12 3zM12 9v5M12 17h.01" fill="none" stroke="currentColor" strokeWidth="2" />
-                  </svg>
-                  <span>Alert</span>
-                </button>
-              </div>
-            </form>
+              <Card className="keyids-card" title="Key Info">
+                <KvList rows={keyInfo} />
+              </Card>
 
-            {isAddPatientOpen ? (
-              <AddPatientModal
-                onClose={() => setIsAddPatientOpen(false)}
-                onCreated={handlePatientCreated}
-              />
-            ) : null}
+              <Card className="contacts-card" title="Contacts">
+                <KvList rows={contacts} />
+              </Card>
+            </aside>
 
-            {message ? <div className="pa-message">{message}</div> : null}
-
-            {searchResults.length > 1 ? (
-              <div className="pa-search-results">
-                {searchResults.map((result) => (
-                  <button type="button" className="pa-search-row" key={result.id} onClick={() => loadActivity(result.id)}>
-                    <span className="pa-search-name">{searchResultName(result)}</span>
-                    <span>{formatDate(result.dateOfBirth)} | {humanize(result.sexAtBirth)} | #{result.id}</span>
-                  </button>
-                ))}
-              </div>
-            ) : null}
-
-            {!activity ? (
-              <div className="pa-start pa-card">
-                <div className="pa-start-title">Patient Activity</div>
-                <div className="pa-start-subtitle">Enter a patient id or search by last name.</div>
-              </div>
-            ) : (
-              <div className="pa-grid">
-                <aside className="pa-col-left">
-                  <div className="pa-card pi-card">
-                    <div className="pi-head">
-                      <div className="pi-title">Patient Information</div>
-                      <DotsButton />
-                    </div>
-
-                    <div className="pi-photo-wrap">
-                      <div
-                        className="pi-photo"
-                        aria-label="Patient"
-                        style={{ backgroundImage: `url(${avatar})` }}
-                      />
-                    </div>
-
-                    <div className="pi-name">{fullName(patient)}</div>
-                    <div className="pi-meta">
-                      <div>Acct: <b>{patient.id}</b> <span className="sep">-</span> Sex: <b>{humanize(patient.sexAtBirth)}</b></div>
-                      <div>DOB: <b>{formatDate(patient.dateOfBirth)}</b> <span className="sep">-</span> Age: <b>{ageText(patient.dateOfBirth)}</b></div>
+            <section className="pa-col-right">
+              <div className="pa-row-1">
+                <div className="pa-card overview-card">
+                  <div className="card-head with-tabs">
+                    <div className="card-title">Overview</div>
+                    <div className="ov-tabs" role="tablist" aria-label="Overview sections">
+                      {overviewTabs.map((tab) => (
+                        <button
+                          className={`ov-tab${activeTab === tab ? ' is-active' : ''}`}
+                          role="tab"
+                          aria-selected={activeTab === tab}
+                          type="button"
+                          key={tab}
+                          onClick={() => setActiveTab(tab)}
+                        >
+                          {tab}
+                        </button>
+                      ))}
                     </div>
                   </div>
 
-                  <Card className="keyids-card" title="Key Info">
-                    <KvList rows={keyInfo} />
-                  </Card>
+                  <div className="ov-inner card">
+                    <OverviewRows tab={activeTab} activity={activity} />
 
-                  <Card className="contacts-card" title="Contacts">
-                    <KvList rows={contacts} />
-                  </Card>
-                </aside>
-
-                <section className="pa-col-right">
-                  <div className="pa-row-1">
-                    <div className="pa-card overview-card">
-                      <div className="card-head with-tabs">
-                        <div className="card-title">Overview</div>
-                        <div className="ov-tabs" role="tablist" aria-label="Overview sections">
-                          {overviewTabs.map((tab) => (
-                            <button
-                              className={`ov-tab${activeTab === tab ? ' is-active' : ''}`}
-                              role="tab"
-                              aria-selected={activeTab === tab}
-                              type="button"
-                              key={tab}
-                              onClick={() => setActiveTab(tab)}
-                            >
-                              {tab}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="ov-inner card">
-                        <OverviewRows tab={activeTab} activity={activity} />
-
-                        <div className="ov-actions">
-                          <button id="btn-ov-edit" className="btn-outline" type="button">
-                            Edit
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <aside className="pa-card notes-card" aria-label="General Notes">
-                      <div className="card-head">
-                        <div className="card-title">General Notes</div>
-                      </div>
-
-                      <div className="notes-body">
-                        {latestNote ? (
-                          <>
-                            <p>{latestNote.body}</p>
-                            <div className="pa-note-date">{formatDateTime(latestNote.createdAt)}</div>
-                          </>
-                        ) : (
-                          <EmptyState message="No notes" />
-                        )}
-                      </div>
-
-                      <button id="btn-add-note" className="w-button notes-add edit-note-btn" type="button">
-                        Edit Note
+                    <div className="ov-actions">
+                      <button id="btn-ov-edit" className="btn-outline" type="button">
+                        Edit
                       </button>
-                    </aside>
-                  </div>
-
-                  <div className="pa-row-2">
-                    <Card className="ins-card" title="Insurance">
-                      <KvList rows={insurance} />
-                    </Card>
-
-                    <Card className="other-card" title="Other">
-                      <KvList rows={other} />
-                    </Card>
-
-                    <Card className="fam-card" title="Recent Visits">
-                      <CompactList
-                        items={activity.visits}
-                        empty="No visits"
-                        renderItem={(visit) => (
-                          <div className="fam-row" key={visit.id}>
-                            <div>
-                              <div className="fam-name linky">{formatDate(visit.visitDate)}</div>
-                              <div className="fam-meta">
-                                {[visit.providerName || visit.visitType || 'Visit', vitalsText(visit)].filter(Boolean).join(' | ')}
-                              </div>
-                            </div>
-                            <StatusPill value={visit.status} />
-                          </div>
-                        )}
-                      />
-                    </Card>
-                  </div>
-
-                  <div className="pa-row-3">
-                    <Card className="activity-card" title="Timeline">
-                      <Timeline items={activity.timeline} />
-                    </Card>
-
-                    <Card className="clinical-card" title="Clinical">
-                      <CompactList
-                        items={[
-                          ...activity.problems.map((item) => ({ ...item, kind: 'Problem', title: item.description })),
-                          ...activity.allergies.map((item) => ({ ...item, kind: 'Allergy', title: item.allergen })),
-                          ...activity.medications.map((item) => ({ ...item, kind: 'Medication', title: item.medicationName })),
-                          ...activity.orders.map((item) => ({ ...item, kind: humanize(item.orderType), title: item.description })),
-                        ]}
-                        empty="No clinical records"
-                        renderItem={(item) => (
-                          <div className="pa-clinical-row" key={`${item.kind}-${item.id}`}>
-                            <div>
-                              <div className="pa-clinical-title">{item.title}</div>
-                              <div className="pa-clinical-meta">{item.kind}</div>
-                            </div>
-                            <StatusPill value={item.status} />
-                          </div>
-                        )}
-                      />
-                    </Card>
-                  </div>
-
-                  <div className="pa-row-actions">
-                    <div className="pa-card actions-card">
-                      <div className="actions-wrap">
-                        {actions.map((action) => (
-                          <button className="btn-outline action-btn" type="button" key={action}>
-                            <svg viewBox="0 0 24 24" aria-hidden="true">
-                              <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" strokeWidth="2" />
-                              <path d="M12 8v8M8 12h8" fill="none" stroke="currentColor" strokeWidth="2" />
-                            </svg>
-                            <span>{action}</span>
-                          </button>
-                        ))}
-                      </div>
                     </div>
                   </div>
-                </section>
+                </div>
+
+                <aside className="pa-card notes-card" aria-label="General Notes">
+                  <div className="card-head">
+                    <div className="card-title">General Notes</div>
+                  </div>
+
+                  <div className="notes-body">
+                    {latestNote ? (
+                      <>
+                        <p>{latestNote.body}</p>
+                        <div className="pa-note-date">{formatDateTime(latestNote.createdAt)}</div>
+                      </>
+                    ) : (
+                      <EmptyState message="No notes" />
+                    )}
+                  </div>
+
+                  <button id="btn-add-note" className="w-button notes-add edit-note-btn" type="button">
+                    Edit Note
+                  </button>
+                </aside>
               </div>
-            )}
+
+              <div className="pa-row-2">
+                <Card className="ins-card" title="Insurance">
+                  <KvList rows={insurance} />
+                </Card>
+
+                <Card className="other-card" title="Other">
+                  <KvList rows={other} />
+                </Card>
+
+                <Card className="fam-card" title="Recent Visits">
+                  <CompactList
+                    items={activity.visits}
+                    empty="No visits"
+                    renderItem={(visit) => (
+                      <div className="fam-row" key={visit.id}>
+                        <div>
+                          <div className="fam-name linky">{formatDate(visit.visitDate)}</div>
+                          <div className="fam-meta">
+                            {[visit.providerName || visit.visitType || 'Visit', vitalsText(visit)].filter(Boolean).join(' | ')}
+                          </div>
+                        </div>
+                        <StatusPill value={visit.status} />
+                      </div>
+                    )}
+                  />
+                </Card>
+              </div>
+
+              <div className="pa-row-3">
+                <Card className="activity-card" title="Timeline">
+                  <Timeline items={activity.timeline} />
+                </Card>
+
+                <Card className="clinical-card" title="Clinical">
+                  <CompactList
+                    items={[
+                      ...activity.problems.map((item) => ({ ...item, kind: 'Problem', title: item.description })),
+                      ...activity.allergies.map((item) => ({ ...item, kind: 'Allergy', title: item.allergen })),
+                      ...activity.medications.map((item) => ({ ...item, kind: 'Medication', title: item.medicationName })),
+                      ...activity.orders.map((item) => ({ ...item, kind: humanize(item.orderType), title: item.description })),
+                    ]}
+                    empty="No clinical records"
+                    renderItem={(item) => (
+                      <div className="pa-clinical-row" key={`${item.kind}-${item.id}`}>
+                        <div>
+                          <div className="pa-clinical-title">{item.title}</div>
+                          <div className="pa-clinical-meta">{item.kind}</div>
+                        </div>
+                        <StatusPill value={item.status} />
+                      </div>
+                    )}
+                  />
+                </Card>
+              </div>
+
+              <div className="pa-row-actions">
+                <div className="pa-card actions-card">
+                  <div className="actions-wrap">
+                    {actions.map((action) => (
+                      <button className="btn-outline action-btn" type="button" key={action}>
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" strokeWidth="2" />
+                          <path d="M12 8v8M8 12h8" fill="none" stroke="currentColor" strokeWidth="2" />
+                        </svg>
+                        <span>{action}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        )}
       </section>
     </MainLayout>
   )
