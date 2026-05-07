@@ -120,6 +120,34 @@ function EmptyState({ message = 'No data' }) {
   return <div className="pa-empty">{message}</div>
 }
 
+function InsurancePlanTabs({ policies, selectedId, onSelect }) {
+  if (!policies?.length || policies.length === 1) {
+    return null
+  }
+
+  return (
+    <div className="mb-3 flex flex-wrap gap-2" role="tablist" aria-label="Insurance plans">
+      {policies.map((policy) => (
+        <button
+          type="button"
+          role="tab"
+          aria-selected={String(policy.id) === String(selectedId)}
+          className={`rounded border px-3 py-1.5 text-xs font-semibold leading-tight transition-colors ${
+            String(policy.id) === String(selectedId)
+              ? 'border-sky-600 bg-sky-50 text-sky-700'
+              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+          }`}
+          key={policy.id}
+          onClick={() => onSelect(policy.id)}
+        >
+          {policy.priority ? `${policy.priority}. ` : ''}
+          {policy.carrierName || 'Insurance'}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function StatusPill({ value }) {
   if (!value) {
     return null
@@ -235,10 +263,10 @@ function vitalsText(visit) {
   return values.join(' | ')
 }
 
-function OverviewRows({ tab, activity }) {
+function OverviewRows({ tab, activity, insurancePolicy }) {
   const patient = activity?.patient
   const contact = activity?.contact
-  const primaryInsurance = activity?.insurancePolicies?.[0]
+  const selectedInsurance = insurancePolicy || activity?.insurancePolicies?.[0]
 
   const rows = {
     Demographics: [
@@ -253,12 +281,12 @@ function OverviewRows({ tab, activity }) {
       ['Ethnicity', patient?.ethnicity],
     ],
     Insurance: [
-      ['Primary carrier', primaryInsurance?.carrierName],
-      ['Member ID', primaryInsurance?.memberId],
-      ['Group', primaryInsurance?.groupNumber || primaryInsurance?.groupName],
-      ['Subscriber', primaryInsurance?.subscriberName],
-      ['Relationship', humanize(primaryInsurance?.relationshipToPatient)],
-      ['Copay', formatCurrency(primaryInsurance?.copay)],
+      ['Carrier', selectedInsurance?.carrierName],
+      ['Member ID', selectedInsurance?.memberId],
+      ['Group', selectedInsurance?.groupNumber || selectedInsurance?.groupName],
+      ['Subscriber', selectedInsurance?.subscriberName],
+      ['Relationship', humanize(selectedInsurance?.relationshipToPatient)],
+      ['Copay', formatCurrency(selectedInsurance?.copay)],
     ],
     Clinical: [
       ['Problems', activity?.problems?.filter((problem) => problem.status === 'active').length],
@@ -520,11 +548,15 @@ export default function PatientActivity() {
   const [message, setMessage] = useState('')
   const [isAddPatientOpen, setIsAddPatientOpen] = useState(false)
   const [languages, setLanguages] = useState([])
+  const [selectedInsuranceId, setSelectedInsuranceId] = useState(null)
   const inputRef = useRef(null)
 
   const patient = activity?.patient
   const contact = activity?.contact
-  const activeInsurance = activity?.insurancePolicies?.find((policy) => policy.isActive) || activity?.insurancePolicies?.[0]
+  const insurancePolicies = activity?.insurancePolicies || []
+  const selectedInsurance = insurancePolicies.find((policy) => String(policy.id) === String(selectedInsuranceId))
+    || insurancePolicies.find((policy) => policy.isActive)
+    || insurancePolicies[0]
   const primaryPharmacy = activity?.pharmacies?.find((pharmacy) => pharmacy.type === 'primary') || activity?.pharmacies?.[0]
   const latestNote = activity?.notes?.[0]
 
@@ -564,12 +596,12 @@ export default function PatientActivity() {
   ]), [contact])
 
   const insurance = useMemo(() => ([
-    ['Name', activeInsurance?.carrierName],
-    ['Member ID', activeInsurance?.memberId, true],
-    ['Group', activeInsurance?.groupNumber],
-    ['Subscriber', activeInsurance?.subscriberName],
-    ['Copay', formatCurrency(activeInsurance?.copay)],
-  ]), [activeInsurance])
+    ['Name', selectedInsurance?.carrierName],
+    ['Member ID', selectedInsurance?.memberId, true],
+    ['Group', selectedInsurance?.groupNumber],
+    ['Subscriber', selectedInsurance?.subscriberName],
+    ['Copay', formatCurrency(selectedInsurance?.copay)],
+  ]), [selectedInsurance])
 
   const other = useMemo(() => ([
     ['Pharmacy', primaryPharmacy?.displayName || primaryPharmacy?.name, true],
@@ -584,6 +616,7 @@ export default function PatientActivity() {
 
     try {
       const response = await getPatientActivity(patientId)
+      setSelectedInsuranceId(null)
       setActivity(response.data)
       setSearchResults([])
       setAccountValue(String(response.data.patient.id))
@@ -765,7 +798,7 @@ export default function PatientActivity() {
                   </div>
 
                   <div className="ov-inner card">
-                    <OverviewRows tab={activeTab} activity={activity} />
+                    <OverviewRows tab={activeTab} activity={activity} insurancePolicy={selectedInsurance} />
 
                     <div className="ov-actions">
                       <button id="btn-ov-edit" className="btn-outline" type="button">
@@ -799,7 +832,18 @@ export default function PatientActivity() {
 
               <div className="pa-row-2">
                 <Card className="ins-card" title="Insurance">
-                  <KvList rows={insurance} />
+                  {insurancePolicies.length ? (
+                    <>
+                      <InsurancePlanTabs
+                        policies={insurancePolicies}
+                        selectedId={selectedInsurance?.id}
+                        onSelect={setSelectedInsuranceId}
+                      />
+                      <KvList rows={insurance} />
+                    </>
+                  ) : (
+                    <EmptyState message="No insurance plans" />
+                  )}
                 </Card>
 
                 <Card className="other-card" title="Other">
