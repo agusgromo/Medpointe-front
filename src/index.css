@@ -976,6 +976,10 @@ a {
   gap: 16px;
 }
 
+.pa-row-1--overview-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .pa-row-2,
 .pa-row-3 {
   display: grid;

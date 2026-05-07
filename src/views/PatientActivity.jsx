@@ -263,7 +263,7 @@ function vitalsText(visit) {
   return values.join(' | ')
 }
 
-function OverviewRows({ tab, activity, insurancePolicy }) {
+function OverviewRows({ tab, activity, insurancePolicies, insurancePolicy, onInsuranceSelect }) {
   const patient = activity?.patient
   const contact = activity?.contact
   const selectedInsurance = insurancePolicy || activity?.insurancePolicies?.[0]
@@ -297,6 +297,28 @@ function OverviewRows({ tab, activity, insurancePolicy }) {
       ['Next visit', formatDateTime(patient?.nextAppointmentStart)],
     ],
   }[tab]
+
+  if (tab === 'Insurance') {
+    if (!insurancePolicies?.length) {
+      return <EmptyState message="No insurance plans on file." />
+    }
+
+    return (
+      <div className="ov-rows">
+        <InsurancePlanTabs
+          policies={insurancePolicies}
+          selectedId={selectedInsurance?.id}
+          onSelect={onInsuranceSelect}
+        />
+        {rows.map(([label, value]) => (
+          <div className="ov-row" key={label}>
+            <div className="ov-k">{label}</div>
+            <div className="ov-v">{value === 0 ? 0 : value || '-'}</div>
+          </div>
+        ))}
+      </div>
+    )
+  }
 
   return (
     <div className="ov-rows">
@@ -557,8 +579,11 @@ export default function PatientActivity() {
   const selectedInsurance = insurancePolicies.find((policy) => String(policy.id) === String(selectedInsuranceId))
     || insurancePolicies.find((policy) => policy.isActive)
     || insurancePolicies[0]
+  const summaryInsurance = insurancePolicies.find((policy) => policy.isActive) || insurancePolicies[0]
   const primaryPharmacy = activity?.pharmacies?.find((pharmacy) => pharmacy.type === 'primary') || activity?.pharmacies?.[0]
   const latestNote = activity?.notes?.[0]
+  const showDemographicsCards = activeTab === 'Demographics'
+  const showClinicalCards = activeTab === 'Clinical'
 
   useEffect(() => {
     async function loadLanguages() {
@@ -596,12 +621,12 @@ export default function PatientActivity() {
   ]), [contact])
 
   const insurance = useMemo(() => ([
-    ['Name', selectedInsurance?.carrierName],
-    ['Member ID', selectedInsurance?.memberId, true],
-    ['Group', selectedInsurance?.groupNumber],
-    ['Subscriber', selectedInsurance?.subscriberName],
-    ['Copay', formatCurrency(selectedInsurance?.copay)],
-  ]), [selectedInsurance])
+    ['Name', summaryInsurance?.carrierName],
+    ['Member ID', summaryInsurance?.memberId, true],
+    ['Group', summaryInsurance?.groupNumber],
+    ['Subscriber', summaryInsurance?.subscriberName],
+    ['Copay', formatCurrency(summaryInsurance?.copay)],
+  ]), [summaryInsurance])
 
   const other = useMemo(() => ([
     ['Pharmacy', primaryPharmacy?.displayName || primaryPharmacy?.name, true],
@@ -777,7 +802,7 @@ export default function PatientActivity() {
             </aside>
 
             <section className="pa-col-right">
-              <div className="pa-row-1">
+              <div className={`pa-row-1${showDemographicsCards ? '' : ' pa-row-1--overview-only'}`}>
                 <div className="pa-card overview-card">
                   <div className="card-head with-tabs">
                     <div className="card-title">Overview</div>
@@ -798,7 +823,13 @@ export default function PatientActivity() {
                   </div>
 
                   <div className="ov-inner card">
-                    <OverviewRows tab={activeTab} activity={activity} insurancePolicy={selectedInsurance} />
+                    <OverviewRows
+                      tab={activeTab}
+                      activity={activity}
+                      insurancePolicies={insurancePolicies}
+                      insurancePolicy={selectedInsurance}
+                      onInsuranceSelect={setSelectedInsuranceId}
+                    />
 
                     <div className="ov-actions">
                       <button id="btn-ov-edit" className="btn-outline" type="button">
@@ -808,93 +839,92 @@ export default function PatientActivity() {
                   </div>
                 </div>
 
-                <aside className="pa-card notes-card" aria-label="General Notes">
-                  <div className="card-head">
-                    <div className="card-title">General Notes</div>
-                  </div>
+                {showDemographicsCards ? (
+                  <aside className="pa-card notes-card" aria-label="General Notes">
+                    <div className="card-head">
+                      <div className="card-title">General Notes</div>
+                    </div>
 
-                  <div className="notes-body">
-                    {latestNote ? (
-                      <>
-                        <p>{latestNote.body}</p>
-                        <div className="pa-note-date">{formatDateTime(latestNote.createdAt)}</div>
-                      </>
-                    ) : (
-                      <EmptyState message="No notes" />
-                    )}
-                  </div>
+                    <div className="notes-body">
+                      {latestNote ? (
+                        <>
+                          <p>{latestNote.body}</p>
+                          <div className="pa-note-date">{formatDateTime(latestNote.createdAt)}</div>
+                        </>
+                      ) : (
+                        <EmptyState message="No notes" />
+                      )}
+                    </div>
 
-                  <button id="btn-add-note" className="w-button notes-add edit-note-btn" type="button">
-                    Edit Note
-                  </button>
-                </aside>
+                    <button id="btn-add-note" className="w-button notes-add edit-note-btn" type="button">
+                      Edit Note
+                    </button>
+                  </aside>
+                ) : null}
               </div>
 
-              <div className="pa-row-2">
-                <Card className="ins-card" title="Insurance">
-                  {insurancePolicies.length ? (
-                    <>
-                      <InsurancePlanTabs
-                        policies={insurancePolicies}
-                        selectedId={selectedInsurance?.id}
-                        onSelect={setSelectedInsuranceId}
-                      />
+              {showDemographicsCards ? (
+                <div className="pa-row-2">
+                  <Card className="ins-card" title="Insurance">
+                    {insurancePolicies.length ? (
                       <KvList rows={insurance} />
-                    </>
-                  ) : (
-                    <EmptyState message="No insurance plans" />
-                  )}
-                </Card>
+                    ) : (
+                      <EmptyState message="No insurance plans" />
+                    )}
+                  </Card>
 
-                <Card className="other-card" title="Other">
-                  <KvList rows={other} />
-                </Card>
+                  <Card className="other-card" title="Other">
+                    <KvList rows={other} />
+                  </Card>
 
-                <Card className="fam-card" title="Recent Visits">
-                  <CompactList
-                    items={activity.visits}
-                    empty="No visits"
-                    renderItem={(visit) => (
-                      <div className="fam-row" key={visit.id}>
-                        <div>
-                          <div className="fam-name linky">{formatDate(visit.visitDate)}</div>
-                          <div className="fam-meta">
-                            {[visit.providerName || visit.visitType || 'Visit', vitalsText(visit)].filter(Boolean).join(' | ')}
+                  <Card className="fam-card" title="Recent Visits">
+                    <CompactList
+                      items={activity.visits}
+                      empty="No visits"
+                      renderItem={(visit) => (
+                        <div className="fam-row" key={visit.id}>
+                          <div>
+                            <div className="fam-name linky">{formatDate(visit.visitDate)}</div>
+                            <div className="fam-meta">
+                              {[visit.providerName || visit.visitType || 'Visit', vitalsText(visit)].filter(Boolean).join(' | ')}
+                            </div>
                           </div>
+                          <StatusPill value={visit.status} />
                         </div>
-                        <StatusPill value={visit.status} />
-                      </div>
-                    )}
-                  />
-                </Card>
-              </div>
+                      )}
+                    />
+                  </Card>
+                </div>
+              ) : null}
 
-              <div className="pa-row-3">
-                <Card className="activity-card" title="Timeline">
-                  <Timeline items={activity.timeline} />
-                </Card>
+              {showClinicalCards ? (
+                <div className="pa-row-3">
+                  <Card className="activity-card" title="Timeline">
+                    <Timeline items={activity.timeline} />
+                  </Card>
 
-                <Card className="clinical-card" title="Clinical">
-                  <CompactList
-                    items={[
-                      ...activity.problems.map((item) => ({ ...item, kind: 'Problem', title: item.description })),
-                      ...activity.allergies.map((item) => ({ ...item, kind: 'Allergy', title: item.allergen })),
-                      ...activity.medications.map((item) => ({ ...item, kind: 'Medication', title: item.medicationName })),
-                      ...activity.orders.map((item) => ({ ...item, kind: humanize(item.orderType), title: item.description })),
-                    ]}
-                    empty="No clinical records"
-                    renderItem={(item) => (
-                      <div className="pa-clinical-row" key={`${item.kind}-${item.id}`}>
-                        <div>
-                          <div className="pa-clinical-title">{item.title}</div>
-                          <div className="pa-clinical-meta">{item.kind}</div>
+                  <Card className="clinical-card" title="Clinical">
+                    <CompactList
+                      items={[
+                        ...activity.problems.map((item) => ({ ...item, kind: 'Problem', title: item.description })),
+                        ...activity.allergies.map((item) => ({ ...item, kind: 'Allergy', title: item.allergen })),
+                        ...activity.medications.map((item) => ({ ...item, kind: 'Medication', title: item.medicationName })),
+                        ...activity.orders.map((item) => ({ ...item, kind: humanize(item.orderType), title: item.description })),
+                      ]}
+                      empty="No clinical records"
+                      renderItem={(item) => (
+                        <div className="pa-clinical-row" key={`${item.kind}-${item.id}`}>
+                          <div>
+                            <div className="pa-clinical-title">{item.title}</div>
+                            <div className="pa-clinical-meta">{item.kind}</div>
+                          </div>
+                          <StatusPill value={item.status} />
                         </div>
-                        <StatusPill value={item.status} />
-                      </div>
-                    )}
-                  />
-                </Card>
-              </div>
+                      )}
+                    />
+                  </Card>
+                </div>
+              ) : null}
 
               <div className="pa-row-actions">
                 <div className="pa-card actions-card">
