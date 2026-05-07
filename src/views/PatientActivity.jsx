@@ -521,6 +521,7 @@ export default function PatientActivity() {
   const patient = activity?.patient
   const contact = activity?.contact
   const activeInsurance = activity?.insurancePolicies?.find((policy) => policy.isActive) || activity?.insurancePolicies?.[0]
+  const primaryPharmacy = activity?.pharmacies?.find((pharmacy) => pharmacy.type === 'primary') || activity?.pharmacies?.[0]
   const latestNote = activity?.notes?.[0]
 
   useEffect(() => {
@@ -558,8 +559,6 @@ export default function PatientActivity() {
     ['PCP', patient?.primaryProviderName, true],
     ['Office', patient?.primaryLocationName, true],
     ['Status', humanize(patient?.status)],
-    ['Class', patient?.classification],
-    ['Category', patient?.category],
   ]), [patient])
 
   const contacts = useMemo(() => ([
@@ -579,12 +578,11 @@ export default function PatientActivity() {
   ]), [activeInsurance])
 
   const other = useMemo(() => ([
-    ['Language', patient?.preferredLanguage],
-    ['Ethnicity', patient?.ethnicity],
-    ['Gender', patient?.genderIdentity],
-    ['Pronouns', patient?.pronouns],
-    ['Stage', patient?.stage],
-  ]), [patient])
+    ['Pharmacy', primaryPharmacy?.displayName || primaryPharmacy?.name, true],
+    ['Billing Status', patient?.billingStatus],
+    ['Classification', patient?.classification],
+    ['Category', patient?.category],
+  ]), [patient, primaryPharmacy])
 
   async function loadActivity(patientId) {
     setLoading(true)
