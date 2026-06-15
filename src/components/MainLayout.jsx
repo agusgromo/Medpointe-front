@@ -6,7 +6,8 @@ import { clearSession } from '../services/session'
 const NAV_ITEMS = [
   { key: 'dashboard', label: 'Dashboard', to: '/', icon: HomeIcon },
   { key: 'activity', label: 'Patient Activity', to: '/patient-activity', icon: ActivityIcon },
-  { key: 'schedule', label: 'Schedule', icon: CalendarIcon, disabled: true },
+  { key: 'schedule', label: 'Schedule', to: '/schedule', icon: CalendarIcon },
+  { key: 'billing', label: 'Billing', to: '/billing', icon: BillingIcon },
   { key: 'clinical', label: 'Clinical', icon: ClinicalIcon, disabled: true },
   { key: 'inbox', label: 'Inbox', icon: InboxIcon, disabled: true },
   { key: 'settings', label: 'Settings', icon: SettingsIcon, disabled: true },
@@ -147,6 +148,17 @@ function CalendarIcon() {
       <line x1="3" y1="9" x2="21" y2="9" />
       <line x1="8" y1="3" x2="8" y2="7" />
       <line x1="16" y1="3" x2="16" y2="7" />
+    </svg>
+  )
+}
+
+function BillingIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="4" y="3" width="16" height="18" rx="2" />
+      <path d="M8 8h8" />
+      <path d="M8 12h8" />
+      <path d="M8 16h5" />
     </svg>
   )
 }

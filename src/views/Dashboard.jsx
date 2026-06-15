@@ -1,40 +1,36 @@
+import { useEffect, useState } from 'react'
 import MainLayout from '../components/MainLayout'
+import { getSchedule } from '../services/schedule'
 import { getStoredSession } from '../services/session'
 
-const scheduleRows = [
-  {
-    time: '8:30am',
-    arrival: 'ok',
-    patient: 'Erica Caffrey',
-    reason: 'Follow up diabetes, medication review',
-    visit: 'ok',
-    billing: 'warn',
-  },
-  {
-    time: '9:00am',
-    arrival: 'warn',
-    patient: 'Daniel Steward',
-    reason: 'Annual wellness visit',
-    visit: 'ok',
-    billing: 'ok',
-  },
-  {
-    time: '9:45am',
-    arrival: 'ok',
-    patient: 'Camila Ortega',
-    reason: 'Lab results and blood pressure check',
-    visit: 'warn',
-    billing: 'ok',
-  },
-  {
-    time: '10:30am',
-    arrival: 'err',
-    patient: 'Noah Price',
-    reason: 'New patient consultation',
-    visit: 'warn',
-    billing: 'warn',
-  },
-]
+function inputDate(value = new Date()) {
+  const date = new Date(value)
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+  return local.toISOString().slice(0, 10)
+}
+
+function formatTime(value) {
+  if (!value) {
+    return ''
+  }
+
+  return new Date(value).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+function statusTone(status) {
+  if (['checked_in', 'triage', 'with_provider', 'ready_checkout', 'checked_out', 'completed', 'paid'].includes(status)) {
+    return 'ok'
+  }
+
+  if (['cancelled', 'no_show', 'denied', 'voided'].includes(status)) {
+    return 'err'
+  }
+
+  return 'warn'
+}
 
 function StatusDot({ status }) {
   return (
@@ -50,6 +46,23 @@ function StatusDot({ status }) {
 export default function Dashboard() {
   const session = getStoredSession()
   const now = new Date()
+  const [scheduleRows, setScheduleRows] = useState([])
+
+  useEffect(() => {
+    async function loadTodaySchedule() {
+      try {
+        const response = await getSchedule({ date: inputDate() })
+
+        if (response.status === 200 && Array.isArray(response.data)) {
+          setScheduleRows(response.data)
+        }
+      } catch {
+        setScheduleRows([])
+      }
+    }
+
+    loadTodaySchedule()
+  }, [])
 
   return (
     <MainLayout>
@@ -117,7 +130,7 @@ export default function Dashboard() {
                 </svg>
               </div>
               <div>
-                <div className="text-[32px] font-extrabold leading-none">0</div>
+                <div className="text-[32px] font-extrabold leading-none">{scheduleRows.length}</div>
                 <div className="mt-1 text-[13px]">Today's Appointments</div>
               </div>
             </div>
@@ -166,30 +179,34 @@ export default function Dashboard() {
               </div>
 
               <div className="max-h-[420px] overflow-auto">
-                {scheduleRows.map((row, index) => (
+                {scheduleRows.slice(0, 8).map((row, index) => (
                   <div
                     className={`grid cursor-pointer grid-cols-[80px_28px_40px_minmax(150px,1.2fr)_minmax(220px,2fr)_28px_28px] items-center gap-x-3 border-t border-[#eef2f7] p-2 hover:bg-[#eef5ff] max-[720px]:min-w-[760px] ${
                       index === 0 ? 'bg-[#ffe6ef]' : ''
                     }`}
-                    key={`${row.time}-${row.patient}`}
+                    key={row.id}
                   >
-                    <div className="min-w-0 py-1.5 text-center">{row.time}</div>
+                    <div className="min-w-0 py-1.5 text-center">{formatTime(row.scheduledStart)}</div>
                     <div className="flex min-w-0 justify-center py-1.5 text-center">
-                      <StatusDot status={row.arrival} />
+                      <StatusDot status={statusTone(row.status)} />
                     </div>
                     <div className="min-w-0 py-1.5 text-center">
                       <span className="mx-auto block h-8 w-8 rounded-full bg-gray-100 object-cover" />
                     </div>
-                    <div className="min-w-0 py-1.5 font-medium">{row.patient}</div>
-                    <div className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap py-1.5 text-xs text-gray-600">{row.reason}</div>
+                    <div className="min-w-0 py-1.5 font-medium">{row.patientName || 'Unassigned'}</div>
+                    <div className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap py-1.5 text-xs text-gray-600">{row.reason || row.appointmentTypeName || '-'}</div>
                     <div className="flex min-w-0 justify-center py-1.5 text-center">
-                      <StatusDot status={row.visit} />
+                      <StatusDot status={statusTone(row.status)} />
                     </div>
                     <div className="flex min-w-0 justify-center py-1.5 text-center">
-                      <StatusDot status={row.billing} />
+                      <StatusDot status={row.billingStatus ? statusTone(row.billingStatus) : 'warn'} />
                     </div>
                   </div>
                 ))}
+
+                {scheduleRows.length === 0 ? (
+                  <div className="pa-empty">No appointments scheduled.</div>
+                ) : null}
               </div>
             </div>
           </div>
