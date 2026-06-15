@@ -44,7 +44,9 @@ body {
 }
 
 button,
-input {
+input,
+select,
+textarea {
   font: inherit;
 }
 
@@ -1269,6 +1271,645 @@ a {
   min-width: 0;
 }
 
+/* Schedule */
+.schedule-screen {
+  display: grid;
+  width: 100%;
+  gap: 16px;
+}
+
+.schedule-topbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid var(--mp-line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.schedule-title-block {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 220px;
+}
+
+.schedule-title-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 8px;
+  background: #eef5ff;
+  color: #2563eb;
+}
+
+.schedule-title-icon svg,
+.schedule-panel-head svg,
+.schedule-refresh svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.schedule-title-block h1 {
+  margin: 0;
+  color: var(--mp-strong);
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.schedule-subtitle,
+.schedule-panel-subtitle,
+.schedule-cell-sub {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.schedule-controls {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.9fr) minmax(160px, 1fr) minmax(150px, 1fr) minmax(140px, 0.8fr) auto;
+  gap: 10px;
+  align-items: end;
+  width: min(100%, 980px);
+}
+
+.schedule-controls label,
+.schedule-form-grid label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.schedule-screen .w-input {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 10px;
+  text-transform: none;
+}
+
+.schedule-refresh {
+  white-space: nowrap;
+}
+
+.schedule-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.schedule-metric {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--mp-line);
+  border-left: 5px solid #94a3b8;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.schedule-metric--blue {
+  border-left-color: #4190f5;
+}
+
+.schedule-metric--green {
+  border-left-color: #10b981;
+}
+
+.schedule-metric--slate {
+  border-left-color: #475569;
+}
+
+.schedule-metric--amber {
+  border-left-color: #f59e0b;
+}
+
+.schedule-metric-value {
+  color: var(--mp-strong);
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.schedule-metric-label {
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.schedule-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
+  gap: 16px;
+  align-items: start;
+}
+
+.schedule-side {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.schedule-panel {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--mp-line);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(16, 24, 40, 0.04);
+}
+
+.schedule-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.schedule-panel-title {
+  color: var(--mp-strong);
+  font-weight: 800;
+}
+
+.schedule-table-wrap {
+  overflow: auto;
+  border: 1px solid #edf2f7;
+  border-radius: 8px;
+}
+
+.schedule-table {
+  width: 100%;
+  min-width: 900px;
+  border-collapse: collapse;
+}
+
+.schedule-table th,
+.schedule-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #eef2f7;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.schedule-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.schedule-table tbody tr {
+  cursor: pointer;
+}
+
+.schedule-table tbody tr:hover,
+.schedule-table tbody tr.is-selected {
+  background: #f2f7ff;
+}
+
+.schedule-time,
+.schedule-patient {
+  color: var(--mp-strong);
+  font-weight: 800;
+}
+
+.schedule-status-select {
+  min-width: 140px;
+  min-height: 34px;
+  border: 1px solid #d9e2ea;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--mp-strong);
+  font-weight: 700;
+}
+
+.schedule-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.schedule-form-grid label.span-2 {
+  grid-column: span 2;
+}
+
+.schedule-textarea {
+  min-height: 78px;
+  padding-top: 9px;
+  resize: vertical;
+}
+
+.schedule-submit {
+  width: 100%;
+  margin-top: 12px;
+}
+
+.schedule-detail-list {
+  display: grid;
+  gap: 10px;
+}
+
+.schedule-detail-list div {
+  display: grid;
+  grid-template-columns: minmax(86px, 0.65fr) minmax(0, 1fr);
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #eef2f7;
+}
+
+.schedule-detail-list div:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.schedule-detail-list span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.schedule-detail-list b {
+  min-width: 0;
+  color: var(--mp-strong);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.pa-alert {
+  padding: 11px 13px;
+  border: 1px solid #f8d9a8;
+  border-radius: 8px;
+  background: #fff8ec;
+  color: #9a5b00;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pa-pill--ready-to-bill,
+.pa-pill--submitted {
+  background: #eef5ff;
+  color: #2563eb;
+}
+
+.pa-pill--denied {
+  background: #fff1f0;
+  color: #b42318;
+}
+
+.pa-pill--draft,
+.pa-pill--charge-entry,
+.pa-pill--coding-review,
+.pa-pill--follow-up {
+  background: #fff8ec;
+  color: #9a5b00;
+}
+
+/* Billing */
+.billing-screen {
+  display: grid;
+  width: 100%;
+  gap: 16px;
+}
+
+.billing-topbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid var(--mp-line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.billing-title-block {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 220px;
+}
+
+.billing-title-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 8px;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.billing-title-icon svg,
+.billing-panel-head svg,
+.billing-refresh svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.billing-title-block h1 {
+  margin: 0;
+  color: var(--mp-strong);
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.billing-subtitle,
+.billing-panel-subtitle,
+.billing-cell-sub {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.billing-controls {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.15fr) minmax(130px, 0.8fr) minmax(150px, 0.9fr) minmax(140px, 0.8fr) minmax(140px, 0.8fr) auto;
+  gap: 10px;
+  align-items: end;
+  width: min(100%, 1120px);
+}
+
+.billing-controls label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.billing-screen .w-input {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 10px;
+  text-transform: none;
+}
+
+.billing-refresh {
+  white-space: nowrap;
+}
+
+.billing-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.billing-metric {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--mp-line);
+  border-left: 5px solid #94a3b8;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.billing-metric--blue {
+  border-left-color: #4190f5;
+}
+
+.billing-metric--green {
+  border-left-color: #10b981;
+}
+
+.billing-metric--amber {
+  border-left-color: #f59e0b;
+}
+
+.billing-metric--slate {
+  border-left-color: #475569;
+}
+
+.billing-metric-value {
+  color: var(--mp-strong);
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.billing-metric-label {
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.billing-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 430px);
+  gap: 16px;
+  align-items: start;
+}
+
+.billing-side {
+  min-width: 0;
+}
+
+.billing-panel {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--mp-line);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(16, 24, 40, 0.04);
+}
+
+.billing-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.billing-panel-title {
+  color: var(--mp-strong);
+  font-weight: 800;
+}
+
+.billing-table-wrap {
+  overflow: auto;
+  border: 1px solid #edf2f7;
+  border-radius: 8px;
+}
+
+.billing-table {
+  width: 100%;
+  min-width: 980px;
+  border-collapse: collapse;
+}
+
+.billing-table th,
+.billing-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #eef2f7;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.billing-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.billing-table tbody tr {
+  cursor: pointer;
+}
+
+.billing-table tbody tr:hover,
+.billing-table tbody tr.is-selected {
+  background: #f2f7ff;
+}
+
+.billing-claim-number,
+.billing-patient {
+  color: var(--mp-strong);
+  font-weight: 800;
+}
+
+.billing-detail-list {
+  display: grid;
+  gap: 10px;
+}
+
+.billing-detail-list div {
+  display: grid;
+  grid-template-columns: minmax(92px, 0.7fr) minmax(0, 1fr);
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #eef2f7;
+}
+
+.billing-detail-list div:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.billing-detail-list span,
+.billing-totals span,
+.billing-section-title {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.billing-detail-list b {
+  min-width: 0;
+  color: var(--mp-strong);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.billing-totals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.billing-totals div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #edf2f7;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.billing-totals b {
+  color: var(--mp-strong);
+  font-size: 16px;
+}
+
+.billing-section {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #eef2f7;
+}
+
+.billing-diagnoses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.billing-diagnoses span {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #eef2f7;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.billing-line-list {
+  display: grid;
+  gap: 8px;
+}
+
+.billing-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 10px;
+  border: 1px solid #edf2f7;
+  border-radius: 8px;
+}
+
+.billing-line div:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.billing-line b {
+  color: var(--mp-strong);
+  font-size: 13px;
+}
+
+.billing-line span {
+  min-width: 0;
+  color: #64748b;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
 /* Legacy helper component still available for early scaffolds. */
 .min-h-svh {
   min-height: 100vh;
@@ -1285,6 +1926,27 @@ a {
 
   .actions-wrap {
     grid-template-columns: repeat(4, minmax(120px, 1fr));
+  }
+
+  .schedule-topbar,
+  .billing-topbar {
+    display: grid;
+  }
+
+  .schedule-layout,
+  .billing-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .schedule-controls,
+  .billing-controls {
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .schedule-refresh,
+  .billing-refresh {
+    width: 100%;
   }
 }
 
@@ -1318,6 +1980,11 @@ a {
   }
 
   .pa-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .schedule-metrics,
+  .billing-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -1358,6 +2025,11 @@ a {
   .ov-v {
     text-align: left;
   }
+
+  .schedule-controls,
+  .billing-controls {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 520px) {
@@ -1385,6 +2057,24 @@ a {
 
   .pa-form-grid label.span-2 {
     grid-column: auto;
+  }
+
+  .schedule-form-grid,
+  .schedule-metrics,
+  .billing-metrics,
+  .billing-totals {
+    grid-template-columns: 1fr;
+  }
+
+  .schedule-form-grid label.span-2 {
+    grid-column: auto;
+  }
+
+  .schedule-topbar,
+  .schedule-panel,
+  .billing-topbar,
+  .billing-panel {
+    padding: 12px;
   }
 
   .nav-secondary .grid {

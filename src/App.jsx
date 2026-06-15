@@ -1,8 +1,10 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import ProtectedRoute from './components/ProtectedRoute'
+import Billing from './views/Billing'
 import Dashboard from './views/Dashboard'
 import Login from './views/Login'
 import PatientActivity from './views/PatientActivity'
+import Schedule from './views/Schedule'
 
 export default function App() {
   return (
@@ -21,6 +23,22 @@ export default function App() {
         element={
           <ProtectedRoute>
             <PatientActivity />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/schedule"
+        element={
+          <ProtectedRoute>
+            <Schedule />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/billing"
+        element={
+          <ProtectedRoute>
+            <Billing />
           </ProtectedRoute>
         }
       />
