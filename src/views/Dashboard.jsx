@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import { ui } from '../components/ui'
 import { getSchedule, getScheduleOptions } from '../services/schedule'
@@ -10,6 +11,19 @@ function inputDate(value = new Date()) {
   const date = new Date(value)
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
   return local.toISOString().slice(0, 10)
+}
+
+function displayDate(value) {
+  if (!value) {
+    return ''
+  }
+
+  return new Date(`${value}T12:00:00`).toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
 }
 
 function formatTime(value) {
@@ -35,6 +49,15 @@ function statusTone(status) {
   return 'warn'
 }
 
+function isPendingNote(row) {
+  return !row?.signedAt
+    && Boolean(row?.encounterClosedAt || ['ready_checkout', 'checked_out', 'completed'].includes(row?.status))
+}
+
+function isBillingOpen(row) {
+  return Boolean(row?.billingStatus) && !['paid', 'voided'].includes(String(row.billingStatus).toLowerCase())
+}
+
 function StatusDot({ status }) {
   return (
     <span
@@ -47,11 +70,22 @@ function StatusDot({ status }) {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate()
   const session = getStoredSession()
-  const now = new Date()
+  const [clockNow, setClockNow] = useState(() => new Date())
+  const [selectedDate, setSelectedDate] = useState(() => inputDate())
   const [officeOptions, setOfficeOptions] = useState([])
   const [selectedOfficeId, setSelectedOfficeId] = useState('')
   const [scheduleRows, setScheduleRows] = useState([])
+  const [scheduleSearch, setScheduleSearch] = useState('')
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setClockNow(new Date())
+    }, 30000)
+
+    return () => window.clearInterval(intervalId)
+  }, [])
 
   useEffect(() => {
     async function loadOfficeOptions() {
@@ -87,7 +121,7 @@ export default function Dashboard() {
     async function loadTodaySchedule() {
       try {
         const response = await getSchedule({
-          date: inputDate(),
+          date: selectedDate,
           locationId: selectedOfficeId || undefined,
         })
 
@@ -102,9 +136,28 @@ export default function Dashboard() {
     }
 
     loadTodaySchedule()
-  }, [selectedOfficeId])
+  }, [selectedDate, selectedOfficeId])
 
   const selectedOffice = officeOptions.find((office) => String(office.id) === String(selectedOfficeId))
+  const filteredScheduleRows = useMemo(() => {
+    const term = scheduleSearch.trim().toLowerCase()
+
+    if (term.length < 3) {
+      return scheduleRows
+    }
+
+    return scheduleRows.filter((row) => String(row.patientName || '').toLowerCase().includes(term))
+  }, [scheduleRows, scheduleSearch])
+  const metrics = useMemo(() => ({
+    appointments: scheduleRows.length,
+    notesPending: scheduleRows.filter(isPendingNote).length,
+    billingOpen: scheduleRows.filter(isBillingOpen).length,
+  }), [scheduleRows])
+  const scheduleSearchIsActive = scheduleSearch.trim().length >= 3
+  const visibleScheduleCount = filteredScheduleRows.length
+  const scheduleEmptyMessage = scheduleSearchIsActive
+    ? 'No matching patients in the selected office schedule.'
+    : 'No appointments scheduled.'
 
   return (
     <MainLayout>
@@ -149,48 +202,52 @@ export default function Dashboard() {
               </div>
 
               <div className="flex min-w-[250px] items-center gap-2.5 rounded-lg border border-[#e6eef8] bg-white px-3.5 py-3 shadow-[0_2px_10px_rgba(16,24,40,0.04)] max-[720px]:w-full max-[720px]:min-w-0">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#eaf2ff] text-[#2563eb]">
-                <svg
-                  className="h-5 w-5 fill-none stroke-current"
-                  viewBox="0 0 24 24"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <rect x="3" y="5" width="18" height="16" rx="3" />
-                  <line x1="3" y1="9" x2="21" y2="9" />
-                  <line x1="8" y1="3" x2="8" y2="7" />
-                  <line x1="16" y1="3" x2="16" y2="7" />
-                </svg>
-              </div>
-              <div className="leading-[1.1]">
-                <div className="font-bold text-slate-900">
-                  {now.toLocaleDateString(undefined, {
-                    weekday: 'long',
-                    month: 'short',
-                    day: 'numeric',
-                  })}
-                </div>
-                <div className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-600">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#eaf2ff] text-[#2563eb]">
                   <svg
-                    className="h-3.5 w-3.5 fill-none stroke-slate-500"
+                    className="h-5 w-5 fill-none stroke-current"
                     viewBox="0 0 24 24"
                     strokeWidth="1.8"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     aria-hidden="true"
                   >
-                    <circle cx="12" cy="12" r="9" />
-                    <path d="M12 7v5l3 2" />
+                    <rect x="3" y="5" width="18" height="16" rx="3" />
+                    <line x1="3" y1="9" x2="21" y2="9" />
+                    <line x1="8" y1="3" x2="8" y2="7" />
+                    <line x1="16" y1="3" x2="16" y2="7" />
                   </svg>
-                  {now.toLocaleTimeString(undefined, {
-                    hour: 'numeric',
-                    minute: '2-digit',
-                  })}
+                </div>
+                <label className="grid min-w-0 flex-1 gap-1">
+                  <span className="text-[11px] font-extrabold uppercase tracking-[0.02em] text-slate-500">Schedule Date</span>
+                  <input
+                    className="min-h-8 min-w-0 rounded-md border border-[#d9e2ea] bg-white px-2.5 py-1 text-sm font-semibold text-slate-900 outline-none"
+                    type="date"
+                    value={selectedDate}
+                    onChange={(event) => setSelectedDate(event.target.value)}
+                  />
+                  <span className="truncate text-xs text-slate-600">{displayDate(selectedDate)}</span>
+                </label>
+                <div className="leading-[1.1] text-right">
+                  <div className="text-[11px] font-extrabold uppercase tracking-[0.02em] text-slate-500">Now</div>
+                  <div className="mt-1 flex items-center justify-end gap-1.5 text-sm font-bold text-slate-900">
+                    <svg
+                      className="h-3.5 w-3.5 fill-none stroke-slate-500"
+                      viewBox="0 0 24 24"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M12 7v5l3 2" />
+                    </svg>
+                    {clockNow.toLocaleTimeString(undefined, {
+                      hour: 'numeric',
+                      minute: '2-digit',
+                    })}
+                  </div>
                 </div>
               </div>
-            </div>
             </div>
           </div>
 
@@ -205,8 +262,8 @@ export default function Dashboard() {
                 </svg>
               </div>
               <div>
-                <div className="text-[32px] font-extrabold leading-none">{scheduleRows.length}</div>
-                <div className="mt-1 text-[13px]">Today's Appointments</div>
+                <div className="text-[32px] font-extrabold leading-none">{metrics.appointments}</div>
+                <div className="mt-1 text-[13px]">Appointments</div>
               </div>
             </div>
 
@@ -218,7 +275,7 @@ export default function Dashboard() {
                 </svg>
               </div>
               <div>
-                <div className="text-[32px] font-extrabold leading-none">0</div>
+                <div className="text-[32px] font-extrabold leading-none">{metrics.notesPending}</div>
                 <div className="mt-1 text-[13px]">Notes Pending</div>
               </div>
             </div>
@@ -233,16 +290,31 @@ export default function Dashboard() {
                 </svg>
               </div>
               <div>
-                <div className="text-[32px] font-extrabold leading-none">0</div>
-                <div className="mt-1 text-[13px]">Inbox Documents</div>
+                <div className="text-[32px] font-extrabold leading-none">{metrics.billingOpen}</div>
+                <div className="mt-1 text-[13px]">Billing Open</div>
               </div>
             </div>
           </div>
 
           <div id="dash-sched" className="rounded-lg border border-mp-line bg-white p-3.5">
-            <div className="mt-2.5 mb-1.5 flex items-center justify-between gap-3">
-              <div className="font-semibold text-mp-strong">Today's Schedule</div>
-              <div className="text-xs font-semibold text-mp-muted">
+            <div className="mt-2.5 mb-2.5 grid gap-2.5 lg:grid-cols-[minmax(0,1fr)_minmax(220px,260px)_auto] lg:items-center">
+              <div>
+                <div className="font-semibold text-mp-strong">Schedule</div>
+                <div className="text-xs font-semibold text-mp-muted">
+                  {visibleScheduleCount} visible {visibleScheduleCount === 1 ? 'appointment' : 'appointments'}
+                </div>
+              </div>
+              <label className="grid gap-1">
+                <span className="text-[11px] font-extrabold uppercase tracking-[0.02em] text-slate-500">Search Patients</span>
+                <input
+                  className="min-h-9 rounded-md border border-[#d9e2ea] bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-900 outline-none"
+                  type="text"
+                  value={scheduleSearch}
+                  onChange={(event) => setScheduleSearch(event.target.value)}
+                  placeholder="Min 3 letters"
+                />
+              </label>
+              <div className="text-xs font-semibold text-mp-muted lg:text-right">
                 {selectedOffice?.name || 'Office'}
               </div>
             </div>
@@ -259,12 +331,15 @@ export default function Dashboard() {
               </div>
 
               <div className="max-h-[420px] overflow-auto">
-                {scheduleRows.slice(0, 8).map((row, index) => (
-                  <div
-                    className={`grid cursor-pointer grid-cols-[80px_28px_40px_minmax(150px,1.2fr)_minmax(220px,2fr)_28px_28px] items-center gap-x-3 border-t border-[#eef2f7] p-2 hover:bg-[#eef5ff] max-[720px]:min-w-[760px] ${
-                      index === 0 ? 'bg-[#ffe6ef]' : ''
+                {filteredScheduleRows.map((row, index) => (
+                  <button
+                    type="button"
+                    className={`grid w-full cursor-pointer grid-cols-[80px_28px_40px_minmax(150px,1.2fr)_minmax(220px,2fr)_28px_28px] items-center gap-x-3 border-t border-[#eef2f7] p-2 text-left hover:bg-[#eef5ff] disabled:cursor-default disabled:hover:bg-white max-[720px]:min-w-[760px] ${
+                      index === 0 ? 'bg-[#ffe6ef]' : 'bg-white'
                     }`}
+                    disabled={!row.patientId}
                     key={row.id}
+                    onClick={() => navigate(`/patient-activity?patientId=${row.patientId}`)}
                   >
                     <div className="min-w-0 py-1.5 text-center">{formatTime(row.scheduledStart)}</div>
                     <div className="flex min-w-0 justify-center py-1.5 text-center">
@@ -281,11 +356,11 @@ export default function Dashboard() {
                     <div className="flex min-w-0 justify-center py-1.5 text-center">
                       <StatusDot status={row.billingStatus ? statusTone(row.billingStatus) : 'warn'} />
                     </div>
-                  </div>
+                  </button>
                 ))}
 
-                {scheduleRows.length === 0 ? (
-                  <div className={ui.empty}>No appointments scheduled.</div>
+                {filteredScheduleRows.length === 0 ? (
+                  <div className={ui.empty}>{scheduleEmptyMessage}</div>
                 ) : null}
               </div>
             </div>

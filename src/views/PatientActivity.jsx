@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import { cn, statusPillClasses, ui } from '../components/ui'
 import avatar from '../assets/patient-avatar.png'
@@ -100,6 +101,13 @@ const emptyPatientSearchForm = {
   insuranceCarrier: '',
   providerId: '',
   billingStatus: '',
+}
+
+const billingStatusLabels = {
+  COL: 'Collections',
+  PCOL: 'Pre-Collections',
+  REG: 'Regular',
+  WIP: 'Write-In Patient',
 }
 
 function DotsButton({ label = 'More options' }) {
@@ -206,6 +214,15 @@ function humanize(value) {
   return String(value).replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
+function formatBillingStatus(value) {
+  if (!value) {
+    return ''
+  }
+
+  const trimmed = String(value).trim()
+  return billingStatusLabels[trimmed] || humanize(trimmed)
+}
+
 function digitsOnly(value) {
   return String(value || '').replace(/\D/g, '')
 }
@@ -297,6 +314,22 @@ function patientSelectorColumns(patient) {
     humanize(patient?.sexAtBirth),
     patient?.id ? String(patient.id) : '',
   ]
+}
+
+function matchesPatientPickerQuery(patient, query) {
+  const needle = String(query || '').trim().toLowerCase()
+
+  if (!needle) {
+    return true
+  }
+
+  return [
+    patient?.lastName,
+    patient?.firstName,
+    searchResultName(patient),
+    fullName(patient),
+    patient?.id ? String(patient.id) : '',
+  ].some((value) => String(value || '').toLowerCase().includes(needle))
 }
 
 function hasPatientAlert(activity) {
@@ -798,6 +831,7 @@ function PatientSearchModal({
   providerOptions,
   billingStatusOptions,
   onClose,
+  onOpenAddPatient,
   onSelect,
 }) {
   const [fields, setFields] = useState(() => buildSearchFieldsFromQuery(initialQuery))
@@ -805,9 +839,41 @@ function PatientSearchModal({
   const [selectedPatientId, setSelectedPatientId] = useState(null)
   const [searching, setSearching] = useState(false)
   const [message, setMessage] = useState('')
+  const [showingPrevious, setShowingPrevious] = useState(() => !initialQuery.trim())
+
+  const loadPreviousPatients = useCallback(async () => {
+    setSearching(true)
+    setShowingPrevious(true)
+    setMessage('')
+
+    try {
+      const response = await getPreviousPatients()
+
+      if (response.status !== 200 || !Array.isArray(response.data)) {
+        setResults([])
+        setSelectedPatientId(null)
+        setMessage(response?.data?.message || 'Unable to load previously opened patients.')
+        return
+      }
+
+      setResults(response.data)
+      setSelectedPatientId(response.data[0]?.id ?? null)
+
+      if (response.data.length === 0) {
+        setMessage('No previously opened patients.')
+      }
+    } catch (error) {
+      setResults([])
+      setSelectedPatientId(null)
+      setMessage(error.message || 'Unable to load previously opened patients.')
+    } finally {
+      setSearching(false)
+    }
+  }, [])
 
   async function performSearch(criteria) {
     setSearching(true)
+    setShowingPrevious(false)
     setMessage('')
 
     try {
@@ -839,11 +905,16 @@ function PatientSearchModal({
     const query = initialQuery.trim()
 
     if (!query) {
-      return
+      const timeoutId = window.setTimeout(() => {
+        void loadPreviousPatients()
+      }, 0)
+
+      return () => window.clearTimeout(timeoutId)
     }
 
     async function autoSearch() {
       setSearching(true)
+      setShowingPrevious(false)
       setMessage('')
 
       try {
@@ -872,7 +943,7 @@ function PatientSearchModal({
     }
 
     void autoSearch()
-  }, [initialQuery])
+  }, [initialQuery, loadPreviousPatients])
 
   function updateField(event) {
     const { name, value, type, checked } = event.target
@@ -919,6 +990,12 @@ function PatientSearchModal({
         <>
           <button className={ui.secondaryButton} type="button" onClick={onClose}>
             Cancel
+          </button>
+          <button className={ui.secondaryButton} type="button" onClick={() => void loadPreviousPatients()}>
+            Previous
+          </button>
+          <button className={ui.secondaryButton} type="button" onClick={onOpenAddPatient}>
+            New Patient
           </button>
           <div className="ml-auto flex flex-wrap justify-end gap-2">
             <button className={ui.secondaryButton} type="button" onClick={handleOpenSelected} disabled={!selectedPatientId}>
@@ -999,7 +1076,7 @@ function PatientSearchModal({
             <select className={ui.input} name="billingStatus" value={fields.billingStatus} onChange={updateField}>
               <option value="">All Statuses</option>
               {billingStatusOptions.map((status) => (
-                <option value={status} key={status}>{status}</option>
+                <option value={status.value} key={status.value}>{status.label}</option>
               ))}
             </select>
           </label>
@@ -1008,23 +1085,42 @@ function PatientSearchModal({
 
       {message ? <div className={ui.message}>{message}</div> : null}
 
+      {showingPrevious ? (
+        <div className="text-[11px] font-extrabold uppercase tracking-wide text-[#64748b]">
+          Previously opened patients
+        </div>
+      ) : null}
+
       <PatientSelectorTable
         patients={results}
         selectedPatientId={selectedPatientId}
         currentPatientId={null}
         onSelect={setSelectedPatientId}
         onOpen={onSelect}
-        emptyMessage={searching ? 'Searching...' : 'Search results will appear here.'}
+        emptyMessage={
+          searching
+            ? (showingPrevious ? 'Loading previously opened patients...' : 'Searching...')
+            : (showingPrevious ? 'No previously opened patients.' : 'Search results will appear here.')
+        }
       />
     </ModalFrame>
   )
 }
 
-function SwitchPatientModal({ currentPatientId, onClose, onSelect }) {
+function SwitchPatientModal({ currentPatientId, onClose, onOpenAddPatient, onSelect }) {
   const [patients, setPatients] = useState([])
   const [selectedPatientId, setSelectedPatientId] = useState(currentPatientId ?? null)
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
+  const [filterQuery, setFilterQuery] = useState('')
+
+  const filteredPatients = useMemo(
+    () => patients.filter((patient) => matchesPatientPickerQuery(patient, filterQuery)),
+    [filterQuery, patients],
+  )
+  const effectiveSelectedPatientId = filteredPatients.some((patient) => String(patient.id) === String(selectedPatientId))
+    ? selectedPatientId
+    : (filteredPatients[0]?.id ?? null)
 
   useEffect(() => {
     async function loadPreviousPatients() {
@@ -1058,12 +1154,12 @@ function SwitchPatientModal({ currentPatientId, onClose, onSelect }) {
   }, [currentPatientId])
 
   async function handleOpenSelected() {
-    if (!selectedPatientId) {
+    if (!effectiveSelectedPatientId) {
       setMessage('Select a patient first.')
       return
     }
 
-    await onSelect(selectedPatientId)
+    await onSelect(effectiveSelectedPatientId)
   }
 
   return (
@@ -1076,21 +1172,41 @@ function SwitchPatientModal({ currentPatientId, onClose, onSelect }) {
           <button className={ui.secondaryButton} type="button" onClick={onClose}>
             Close
           </button>
-          <button className={cn(ui.primaryButton, 'ml-auto')} type="button" onClick={handleOpenSelected} disabled={!selectedPatientId}>
-            Open Patient
-          </button>
+          <div className="ml-auto flex flex-wrap justify-end gap-2">
+            <button className={ui.secondaryButton} type="button" onClick={onOpenAddPatient}>
+              New Patient
+            </button>
+            <button className={ui.primaryButton} type="button" onClick={handleOpenSelected} disabled={!selectedPatientId}>
+              Open Patient
+            </button>
+          </div>
         </>
       )}
     >
       {message ? <div className={ui.message}>{message}</div> : null}
 
+      <label className={ui.label}>
+        <span>Name</span>
+        <input
+          className={ui.input}
+          type="text"
+          value={filterQuery}
+          onChange={(event) => setFilterQuery(event.target.value)}
+          placeholder="Enter a few letters of last name, first initial"
+        />
+      </label>
+
       <PatientSelectorTable
-        patients={patients}
-        selectedPatientId={selectedPatientId}
+        patients={filteredPatients}
+        selectedPatientId={effectiveSelectedPatientId}
         currentPatientId={currentPatientId}
         onSelect={setSelectedPatientId}
         onOpen={onSelect}
-        emptyMessage={loading ? 'Loading previously opened patients...' : 'No previously opened patients.'}
+        emptyMessage={
+          loading
+            ? 'Loading previously opened patients...'
+            : (filterQuery.trim() ? 'No matching previously opened patients.' : 'No previously opened patients.')
+        }
       />
     </ModalFrame>
   )
@@ -1162,6 +1278,8 @@ function PatientAlertModal({ patient, onClose, onSaved }) {
 }
 
 export default function PatientActivity() {
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [accountValue, setAccountValue] = useState('')
   const [activity, setActivity] = useState(null)
   const [activeTab, setActiveTab] = useState('Demographics')
@@ -1178,6 +1296,7 @@ export default function PatientActivity() {
   const [selectedInsuranceId, setSelectedInsuranceId] = useState(null)
   const inputRef = useRef(null)
   const autoOpenedAlertPatientIdRef = useRef(null)
+  const routePatientId = searchParams.get('patientId')?.trim() || ''
 
   const patient = activity?.patient
   const contact = activity?.contact
@@ -1267,12 +1386,12 @@ export default function PatientActivity() {
 
   const other = useMemo(() => ([
     ['Pharmacy', primaryPharmacy?.displayName || primaryPharmacy?.name, true],
-    ['Billing Status', patient?.billingStatus],
+    ['Billing Status', formatBillingStatus(patient?.billingStatus)],
     ['Classification', patient?.classification],
     ['Category', patient?.category],
   ]), [patient, primaryPharmacy])
 
-  async function loadActivity(patientId) {
+  const loadActivity = useCallback(async (patientId) => {
     setLoading(true)
     setMessage('')
 
@@ -1292,7 +1411,29 @@ export default function PatientActivity() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (!/^\d+$/.test(routePatientId)) {
+      return
+    }
+
+    let cancelled = false
+
+    async function loadFromRoute() {
+      await loadActivity(routePatientId)
+
+      if (!cancelled) {
+        navigate('/patient-activity', { replace: true })
+      }
+    }
+
+    void loadFromRoute()
+
+    return () => {
+      cancelled = true
+    }
+  }, [loadActivity, navigate, routePatientId])
 
   async function handleSearch(event) {
     event?.preventDefault()
@@ -1323,6 +1464,13 @@ export default function PatientActivity() {
     setIsAlertOpen(false)
     setPatientSearchSeed('')
     await loadActivity(patientId)
+  }
+
+  function openAddPatientModal() {
+    setIsPatientSearchOpen(false)
+    setIsSwitchPatientOpen(false)
+    setPatientSearchSeed('')
+    setIsAddPatientOpen(true)
   }
 
   function handleAlertSaved(nextAlert) {
@@ -1402,7 +1550,7 @@ export default function PatientActivity() {
               </svg>
               <span>Patient search</span>
             </button>
-            <button className={cn(ui.secondaryButton, 'max-[520px]:w-full max-[520px]:justify-start')} title="Add patient" type="button" onClick={() => setIsAddPatientOpen(true)}>
+            <button className={cn(ui.secondaryButton, 'max-[520px]:w-full max-[520px]:justify-start')} title="Add patient" type="button" onClick={openAddPatientModal}>
               <svg viewBox="0 0 24 24" aria-hidden="true" className="h-[18px] w-[18px] shrink-0 fill-none stroke-current stroke-2">
                 <path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" strokeWidth="2" />
               </svg>
@@ -1434,6 +1582,7 @@ export default function PatientActivity() {
               setIsPatientSearchOpen(false)
               setPatientSearchSeed('')
             }}
+            onOpenAddPatient={openAddPatientModal}
             onSelect={handlePatientSelected}
           />
         ) : null}
@@ -1442,6 +1591,7 @@ export default function PatientActivity() {
           <SwitchPatientModal
             currentPatientId={activity?.patient?.id}
             onClose={() => setIsSwitchPatientOpen(false)}
+            onOpenAddPatient={openAddPatientModal}
             onSelect={handlePatientSelected}
           />
         ) : null}
