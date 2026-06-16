@@ -2,7 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import MainLayout from '../components/MainLayout'
 import { cn, statusPillClasses, ui } from '../components/ui'
 import avatar from '../assets/patient-avatar.png'
-import { createPatient, getLanguages, getPatientActivity, searchPatients } from '../services/patients'
+import {
+  createPatient,
+  getLanguages,
+  getPatientActivity,
+  getPatientSearchOptions,
+  getPreviousPatients,
+  searchPatients,
+  updatePatientAlert,
+} from '../services/patients'
 
 const actions = [
   'Charge',
@@ -78,8 +86,21 @@ const emptyPatientForm = {
   communicationPreference: '',
 }
 
-const PATIENT_ACTIVITY_RECENTS_KEY = 'medpointe.patientActivity.recentPatients'
-const PATIENT_ACTIVITY_RECENTS_LIMIT = 12
+const emptyPatientSearchForm = {
+  account: '',
+  lastName: '',
+  firstName: '',
+  searchIdentityHistory: false,
+  dateOfBirth: '',
+  lastTreatmentDate: '',
+  homePhone: '',
+  workPhone: '',
+  cellPhone: '',
+  insurancePlan: '',
+  insuranceCarrier: '',
+  providerId: '',
+  billingStatus: '',
+}
 
 function DotsButton({ label = 'More options' }) {
   return (
@@ -185,124 +206,101 @@ function humanize(value) {
   return String(value).replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
-function searchResultMeta(patient) {
-  return [
-    formatDate(patient?.dateOfBirth),
-    humanize(patient?.sexAtBirth),
-    patient?.primaryLocationName,
-    patient?.primaryProviderName,
-    patient?.id ? `#${patient.id}` : '',
-  ].filter(Boolean).join(' | ')
+function digitsOnly(value) {
+  return String(value || '').replace(/\D/g, '')
 }
 
-function buildPatientSearchQuery(fields) {
-  const account = fields.account.trim()
+function normalizePhoneInput(value) {
+  const digits = digitsOnly(value).slice(0, 10)
 
-  if (account) {
-    return account
+  if (!digits) {
+    return ''
   }
 
-  return [fields.lastName.trim(), fields.firstName.trim()].filter(Boolean).join(' ').trim()
+  if (digits.length <= 3) {
+    return digits
+  }
+
+  if (digits.length <= 6) {
+    return `${digits.slice(0, 3)}-${digits.slice(3)}`
+  }
+
+  return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`
 }
 
-function readRecentPatients() {
-  if (typeof window === 'undefined') {
-    return []
+function buildSearchFieldsFromQuery(initialQuery = '') {
+  const trimmed = initialQuery.trim()
+
+  if (!trimmed) {
+    return { ...emptyPatientSearchForm }
   }
 
-  try {
-    const stored = window.localStorage.getItem(PATIENT_ACTIVITY_RECENTS_KEY)
-    const parsed = stored ? JSON.parse(stored) : []
-
-    if (!Array.isArray(parsed)) {
-      return []
+  if (/^\d+$/.test(trimmed)) {
+    return {
+      ...emptyPatientSearchForm,
+      account: trimmed,
     }
-
-    return parsed.filter((patient) => patient?.id)
-  } catch {
-    return []
-  }
-}
-
-function writeRecentPatients(patients) {
-  if (typeof window === 'undefined') {
-    return
   }
 
-  window.localStorage.setItem(PATIENT_ACTIVITY_RECENTS_KEY, JSON.stringify(patients))
-}
+  if (trimmed.includes(',')) {
+    const [lastName, firstName] = trimmed.split(',', 2)
 
-function toRecentPatient(activityData) {
-  const patient = activityData?.patient
+    return {
+      ...emptyPatientSearchForm,
+      lastName: lastName.trim(),
+      firstName: (firstName || '').trim(),
+    }
+  }
 
-  if (!patient?.id) {
-    return null
+  if (trimmed.includes(' ')) {
+    const [lastName, ...firstNameParts] = trimmed.split(' ')
+
+    return {
+      ...emptyPatientSearchForm,
+      lastName: lastName.trim(),
+      firstName: firstNameParts.join(' ').trim(),
+    }
   }
 
   return {
-    id: String(patient.id),
-    firstName: patient.firstName || '',
-    middleName: patient.middleName || '',
-    lastName: patient.lastName || '',
-    dateOfBirth: patient.dateOfBirth || '',
-    sexAtBirth: patient.sexAtBirth || '',
-    primaryProviderName: patient.primaryProviderName || '',
-    primaryLocationName: patient.primaryLocationName || '',
-    lastOpenedAt: new Date().toISOString(),
+    ...emptyPatientSearchForm,
+    lastName: trimmed,
   }
 }
 
-function rememberRecentPatient(currentPatients, activityData) {
-  const nextPatient = toRecentPatient(activityData)
-
-  if (!nextPatient) {
-    return currentPatients
+function buildPatientSearchPayload(fields) {
+  return {
+    account: fields.account.trim(),
+    lastName: fields.lastName.trim(),
+    firstName: fields.firstName.trim(),
+    history: fields.searchIdentityHistory ? 'Y' : 'N',
+    dateOfBirth: fields.dateOfBirth || '',
+    lastTreatmentDate: fields.lastTreatmentDate || '',
+    homePhone: digitsOnly(fields.homePhone),
+    workPhone: digitsOnly(fields.workPhone),
+    cellPhone: digitsOnly(fields.cellPhone),
+    insurancePlan: fields.insurancePlan.trim(),
+    insuranceCarrier: fields.insuranceCarrier.trim(),
+    providerId: fields.providerId || '',
+    billingStatus: fields.billingStatus || '',
   }
-
-  return [
-    nextPatient,
-    ...currentPatients.filter((patient) => String(patient.id) !== String(nextPatient.id)),
-  ].slice(0, PATIENT_ACTIVITY_RECENTS_LIMIT)
 }
 
-function recentPatientMatches(patient, query) {
-  const term = query.trim().toLowerCase()
+function hasPatientSearchCriteria(fields) {
+  return Object.values(buildPatientSearchPayload(fields)).some(Boolean)
+}
 
-  if (!term) {
-    return true
-  }
-
+function patientSelectorColumns(patient) {
   return [
-    patient.id,
-    patient.lastName,
-    patient.firstName,
-    patient.middleName,
-    patient.primaryLocationName,
-    patient.primaryProviderName,
+    searchResultName(patient),
+    formatDate(patient?.dateOfBirth),
+    humanize(patient?.sexAtBirth),
+    patient?.id ? String(patient.id) : '',
   ]
-    .filter(Boolean)
-    .some((value) => String(value).toLowerCase().includes(term))
 }
 
-function getAlertNotes(activity) {
-  return (activity?.notes || []).filter((note) => {
-    const noteType = String(note.noteType || '').toLowerCase()
-    return ['alert', 'warning', 'reminder'].some((token) => noteType.includes(token))
-  })
-}
-
-function getAlertSummaryRows(activity) {
-  const patient = activity?.patient
-
-  return [
-    ['Status', humanize(patient?.status)],
-    ['Billing Status', humanize(patient?.billingStatus)],
-    ['Classification', patient?.classification],
-    ['Category', patient?.category],
-    ['Stage', patient?.stage],
-    ['Office', patient?.primaryLocationName],
-    ['Provider', patient?.primaryProviderName],
-  ].filter(([, value]) => value)
+function hasPatientAlert(activity) {
+  return Boolean(activity?.patient?.alert?.trim())
 }
 
 function formatDate(value) {
@@ -491,6 +489,105 @@ function CompactList({ items, renderItem, empty }) {
   }
 
   return <div className="grid gap-2.5">{items.slice(0, 6).map(renderItem)}</div>
+}
+
+function ModalCloseButton({ onClick }) {
+  return (
+    <button
+      className={ui.iconButton}
+      type="button"
+      aria-label="Close"
+      onClick={onClick}
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4">
+        <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="2" />
+      </svg>
+    </button>
+  )
+}
+
+function ModalFrame({ title, subtitle, children, footer, onClose, maxWidth = 'max-w-[960px]' }) {
+  return (
+    <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-900/30 p-5 max-[520px]:items-stretch max-[520px]:p-2.5" role="presentation">
+      <section
+        className={`max-h-[calc(100vh-40px)] w-full ${maxWidth} overflow-auto rounded-lg border border-[#d9e2ea] bg-white shadow-[0_24px_70px_rgba(15,23,42,0.24)] max-[520px]:max-h-[calc(100vh-20px)]`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-frame-title"
+      >
+        <div className="flex items-center justify-between gap-4 border-b border-[#edf2f7] px-[18px] py-4 max-[520px]:px-3.5">
+          <div>
+            <h2 id="modal-frame-title" className="m-0 text-[22px] font-extrabold text-mp-strong">{title}</h2>
+            {subtitle ? <p className="mt-[3px] mb-0 text-sm text-mp-muted">{subtitle}</p> : null}
+          </div>
+          <ModalCloseButton onClick={onClose} />
+        </div>
+
+        <div className="grid gap-4 px-[18px] py-4 max-[520px]:px-3.5">
+          {children}
+        </div>
+
+        {footer ? (
+          <div className="flex items-center justify-between gap-4 border-t border-[#edf2f7] bg-[#fbfdff] px-[18px] py-4 max-[520px]:px-3.5">
+            {footer}
+          </div>
+        ) : null}
+      </section>
+    </div>
+  )
+}
+
+function PatientSelectorTable({
+  patients,
+  selectedPatientId,
+  currentPatientId,
+  onSelect,
+  onOpen,
+  emptyMessage,
+}) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-mp-line bg-white">
+      <div className="grid grid-cols-[minmax(0,1.6fr)_132px_88px_96px] gap-0 border-b border-mp-line bg-[#f8fafc] px-3 py-2 text-[11px] font-extrabold uppercase tracking-wide text-[#64748b] max-[760px]:hidden">
+        <div>Name</div>
+        <div>DOB</div>
+        <div>Sex</div>
+        <div>Acct</div>
+      </div>
+
+      <div className="max-h-[360px] overflow-auto">
+        {patients.length ? (
+          patients.map((patient) => {
+            const isSelected = String(patient.id) === String(selectedPatientId)
+            const isCurrent = String(patient.id) === String(currentPatientId)
+            const [name, dob, sex, account] = patientSelectorColumns(patient)
+
+            return (
+              <button
+                type="button"
+                className={cn(
+                  'grid w-full grid-cols-[minmax(0,1.6fr)_132px_88px_96px] items-center gap-0 border-t border-[#eef2f7] px-3 py-3 text-left text-sm text-mp-text first:border-t-0 hover:bg-[#f8fbff] max-[760px]:grid-cols-1 max-[760px]:gap-1',
+                  isSelected ? 'bg-[#eef5ff]' : 'bg-white',
+                )}
+                key={patient.id}
+                onClick={() => onSelect(patient.id)}
+                onDoubleClick={() => onOpen(patient.id)}
+              >
+                <div className="min-w-0 font-extrabold text-mp-strong [overflow-wrap:anywhere]">
+                  {name}
+                  {isCurrent ? ' (Current)' : ''}
+                </div>
+                <div className="text-[#475569] max-[760px]:text-xs max-[760px]:font-semibold max-[760px]:uppercase max-[760px]:text-[#64748b]">{dob || '-'}</div>
+                <div className="text-[#475569] max-[760px]:text-xs max-[760px]:font-semibold max-[760px]:uppercase max-[760px]:text-[#64748b]">{sex || '-'}</div>
+                <div className="text-[#475569] max-[760px]:text-xs max-[760px]:font-semibold max-[760px]:uppercase max-[760px]:text-[#64748b]">{account || '-'}</div>
+              </button>
+            )
+          })
+        ) : (
+          <div className={ui.empty}>{emptyMessage}</div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 function AddPatientModal({ languages, onClose, onCreated }) {
@@ -696,317 +793,377 @@ function AddPatientModal({ languages, onClose, onCreated }) {
   )
 }
 
-function PatientSearchModal({ initialQuery = '', onClose, onSelect }) {
-  const [fields, setFields] = useState(() => ({
-    account: /^\d+$/.test(initialQuery.trim()) ? initialQuery.trim() : '',
-    lastName: /^\d+$/.test(initialQuery.trim()) ? '' : initialQuery.trim(),
-    firstName: '',
-  }))
+function PatientSearchModal({
+  initialQuery = '',
+  providerOptions,
+  billingStatusOptions,
+  onClose,
+  onSelect,
+}) {
+  const [fields, setFields] = useState(() => buildSearchFieldsFromQuery(initialQuery))
   const [results, setResults] = useState([])
+  const [selectedPatientId, setSelectedPatientId] = useState(null)
   const [searching, setSearching] = useState(false)
   const [message, setMessage] = useState('')
 
-  function updateField(event) {
-    const { name, value } = event.target
-
-    setFields((current) => ({
-      ...current,
-      [name]: value,
-    }))
-  }
-
-  async function handleSubmit(event) {
-    event.preventDefault()
-
-    const query = buildPatientSearchQuery(fields)
-
-    if (!query) {
-      setMessage('Enter an account number or patient name.')
-      setResults([])
-      return
-    }
-
+  async function performSearch(criteria) {
     setSearching(true)
     setMessage('')
 
     try {
-      const response = await searchPatients(query)
+      const response = await searchPatients(criteria)
 
       if (response.status !== 200 || !Array.isArray(response.data)) {
         setResults([])
-        setMessage(response?.message || 'Unable to search patients.')
+        setSelectedPatientId(null)
+        setMessage(response?.data?.message || 'Unable to search patients.')
         return
       }
 
       setResults(response.data)
-
-      if (response.data.length === 1) {
-        onSelect(response.data[0].id)
-        return
-      }
+      setSelectedPatientId(response.data[0]?.id ?? null)
 
       if (response.data.length === 0) {
         setMessage('No matching patients found.')
       }
     } catch (error) {
       setResults([])
+      setSelectedPatientId(null)
       setMessage(error.message || 'Unable to search patients.')
     } finally {
       setSearching(false)
     }
   }
 
+  useEffect(() => {
+    const query = initialQuery.trim()
+
+    if (!query) {
+      return
+    }
+
+    async function autoSearch() {
+      setSearching(true)
+      setMessage('')
+
+      try {
+        const response = await searchPatients({ search: query })
+
+        if (response.status !== 200 || !Array.isArray(response.data)) {
+          setResults([])
+          setSelectedPatientId(null)
+          setMessage(response?.data?.message || 'Unable to search patients.')
+          return
+        }
+
+        setResults(response.data)
+        setSelectedPatientId(response.data[0]?.id ?? null)
+
+        if (response.data.length === 0) {
+          setMessage('No matching patients found.')
+        }
+      } catch (error) {
+        setResults([])
+        setSelectedPatientId(null)
+        setMessage(error.message || 'Unable to search patients.')
+      } finally {
+        setSearching(false)
+      }
+    }
+
+    void autoSearch()
+  }, [initialQuery])
+
+  function updateField(event) {
+    const { name, value, type, checked } = event.target
+
+    setFields((current) => ({
+      ...current,
+      [name]:
+        type === 'checkbox'
+          ? checked
+          : ['homePhone', 'workPhone', 'cellPhone'].includes(name)
+            ? normalizePhoneInput(value)
+            : value,
+    }))
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+
+    if (!hasPatientSearchCriteria(fields)) {
+      setResults([])
+      setSelectedPatientId(null)
+      setMessage('Enter at least one search field.')
+      return
+    }
+
+    await performSearch(buildPatientSearchPayload(fields))
+  }
+
+  async function handleOpenSelected() {
+    if (!selectedPatientId) {
+      setMessage('Select a patient first.')
+      return
+    }
+
+    await onSelect(selectedPatientId)
+  }
+
   return (
-    <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-900/30 p-5" role="presentation">
-      <section
-        className="max-h-[calc(100vh-40px)] w-full max-w-[920px] overflow-auto rounded-lg border border-[#d9e2ea] bg-white shadow-[0_24px_70px_rgba(15,23,42,0.24)]"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="patient-search-title"
-      >
-        <form onSubmit={handleSubmit}>
-          <div className="flex items-center justify-between gap-4 border-b border-[#edf2f7] px-[18px] py-4">
-            <div>
-              <h2 id="patient-search-title" className="m-0 text-[22px] font-extrabold text-mp-strong">Patient Search</h2>
-              <p className="mt-[3px] mb-0 text-sm text-mp-muted">Find a patient by account or name</p>
-            </div>
-            <button
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#d7e1ea] bg-white text-slate-600 transition hover:border-sky-200 hover:bg-[#f3f7ff] hover:text-[#2563eb]"
-              type="button"
-              aria-label="Close"
-              onClick={onClose}
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="2" />
-              </svg>
+    <ModalFrame
+      title="Patient Search"
+      subtitle="Search and select a patient"
+      onClose={onClose}
+      footer={(
+        <>
+          <button className={ui.secondaryButton} type="button" onClick={onClose}>
+            Cancel
+          </button>
+          <div className="ml-auto flex flex-wrap justify-end gap-2">
+            <button className={ui.secondaryButton} type="button" onClick={handleOpenSelected} disabled={!selectedPatientId}>
+              Open Patient
             </button>
-          </div>
-
-          <div className="grid gap-4 px-[18px] py-4">
-            <div className="grid gap-3 md:grid-cols-3">
-              <label className="grid min-w-0 gap-[5px] text-xs font-extrabold uppercase text-[#64748b]">
-                <span>Account</span>
-                <input className="min-h-[42px] rounded-lg border border-[#d9e2ea] bg-white px-2.5 text-mp-strong outline-none" name="account" value={fields.account} onChange={updateField} />
-              </label>
-              <label className="grid min-w-0 gap-[5px] text-xs font-extrabold uppercase text-[#64748b]">
-                <span>Last Name</span>
-                <input className="min-h-[42px] rounded-lg border border-[#d9e2ea] bg-white px-2.5 text-mp-strong outline-none" name="lastName" value={fields.lastName} onChange={updateField} />
-              </label>
-              <label className="grid min-w-0 gap-[5px] text-xs font-extrabold uppercase text-[#64748b]">
-                <span>First Name</span>
-                <input className="min-h-[42px] rounded-lg border border-[#d9e2ea] bg-white px-2.5 text-mp-strong outline-none" name="firstName" value={fields.firstName} onChange={updateField} />
-              </label>
-            </div>
-
-            {message ? <div className={ui.message}>{message}</div> : null}
-
-            <div className="grid max-h-[380px] gap-2 overflow-auto">
-              {results.map((result) => (
-                <button
-                  type="button"
-                  className="flex flex-col gap-1 rounded-lg border border-mp-line bg-white px-3.5 py-3 text-left text-sm text-mp-text transition hover:border-sky-200 hover:bg-[#eef5ff]"
-                  key={result.id}
-                  onClick={() => onSelect(result.id)}
-                >
-                  <span className="font-extrabold text-mp-strong">{searchResultName(result)}</span>
-                  <span>{searchResultMeta(result)}</span>
-                </button>
-              ))}
-
-              {!results.length && !message ? (
-                <div className={ui.empty}>Search results will appear here.</div>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between gap-4 border-t border-[#edf2f7] bg-[#fbfdff] px-[18px] py-4">
-            <button
-              className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[#d7e1ea] bg-white px-4 font-bold text-slate-600 transition hover:border-sky-200 hover:bg-[#f3f7ff] hover:text-[#2563eb]"
-              type="button"
-              onClick={onClose}
-            >
-              Cancel
-            </button>
-            <button
-              className="inline-flex min-h-10 min-w-[150px] items-center justify-center rounded-lg bg-mp-blue-700 px-4 font-bold text-white transition hover:bg-mp-blue-900"
-              type="submit"
-              disabled={searching}
-            >
+            <button className={ui.primaryButton} type="submit" form="patient-search-form" disabled={searching}>
               {searching ? 'Searching' : 'Search'}
             </button>
           </div>
-        </form>
-      </section>
-    </div>
-  )
-}
-
-function SwitchPatientModal({ currentPatientId, recentPatients, onClose, onSelect }) {
-  const [query, setQuery] = useState('')
-
-  const filteredPatients = useMemo(
-    () => recentPatients.filter((patient) => recentPatientMatches(patient, query)),
-    [query, recentPatients],
-  )
-
-  return (
-    <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-900/30 p-5" role="presentation">
-      <section
-        className="max-h-[calc(100vh-40px)] w-full max-w-[920px] overflow-auto rounded-lg border border-[#d9e2ea] bg-white shadow-[0_24px_70px_rgba(15,23,42,0.24)]"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="switch-patient-title"
-      >
-        <div className="flex items-center justify-between gap-4 border-b border-[#edf2f7] px-[18px] py-4">
-          <div>
-            <h2 id="switch-patient-title" className="m-0 text-[22px] font-extrabold text-mp-strong">Switch Patient</h2>
-            <p className="mt-[3px] mb-0 text-sm text-mp-muted">Previously opened patients</p>
-          </div>
-          <button
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#d7e1ea] bg-white text-slate-600 transition hover:border-sky-200 hover:bg-[#f3f7ff] hover:text-[#2563eb]"
-            type="button"
-            aria-label="Close"
-            onClick={onClose}
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="2" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="grid gap-4 px-[18px] py-4">
-          <label className="grid min-w-0 gap-[5px] text-xs font-extrabold uppercase text-[#64748b]">
-            <span>Name or Account</span>
-            <input
-              className="min-h-[42px] rounded-lg border border-[#d9e2ea] bg-white px-2.5 text-mp-strong outline-none"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
+        </>
+      )}
+    >
+      <form id="patient-search-form" className="grid gap-4" onSubmit={handleSubmit}>
+        <div className="grid gap-3 xl:grid-cols-3 md:grid-cols-2 max-[520px]:grid-cols-1">
+          <label className={ui.label}>
+            <span>Account</span>
+            <input className={ui.input} name="account" value={fields.account} onChange={updateField} />
           </label>
-
-          <div className="grid max-h-[380px] gap-2 overflow-auto">
-            {filteredPatients.map((patient) => (
-              <button
-                type="button"
-                className="flex flex-col gap-1 rounded-lg border border-mp-line bg-white px-3.5 py-3 text-left text-sm text-mp-text transition hover:border-sky-200 hover:bg-[#eef5ff]"
-                key={patient.id}
-                onClick={() => onSelect(patient.id)}
-              >
-                <span className="font-extrabold text-mp-strong">
-                  {searchResultName(patient)}
-                  {String(patient.id) === String(currentPatientId) ? ' (Current)' : ''}
-                </span>
-                <span>{searchResultMeta(patient)}</span>
-              </button>
-            ))}
-
-            {!filteredPatients.length ? (
-              <div className={ui.empty}>No recently opened patients.</div>
-            ) : null}
+          <label className={ui.label}>
+            <span>Last Name</span>
+            <input className={ui.input} name="lastName" value={fields.lastName} onChange={updateField} />
+          </label>
+          <label className={ui.label}>
+            <span>First Name</span>
+            <input className={ui.input} name="firstName" value={fields.firstName} onChange={updateField} />
+          </label>
+          <label className={ui.label}>
+            <span>Date of Birth</span>
+            <input className={ui.input} type="date" name="dateOfBirth" value={fields.dateOfBirth} onChange={updateField} />
+          </label>
+          <label className={ui.label}>
+            <span>Date of Last Treatment</span>
+            <input className={ui.input} type="date" name="lastTreatmentDate" value={fields.lastTreatmentDate} onChange={updateField} />
+          </label>
+          <div className={cn(ui.label, 'flex items-end pb-[2px]')}>
+            <span className="sr-only">Search Identity History Info</span>
+            <label className="flex min-h-10 items-center gap-2 rounded-lg border border-[#d9e2ea] bg-white px-3 text-sm font-semibold text-mp-strong">
+              <input
+                type="checkbox"
+                name="searchIdentityHistory"
+                checked={fields.searchIdentityHistory}
+                onChange={updateField}
+              />
+              <span>Search Identity History Info</span>
+            </label>
           </div>
+          <label className={ui.label}>
+            <span>Phone Home</span>
+            <input className={ui.input} name="homePhone" value={fields.homePhone} onChange={updateField} />
+          </label>
+          <label className={ui.label}>
+            <span>Phone Work</span>
+            <input className={ui.input} name="workPhone" value={fields.workPhone} onChange={updateField} />
+          </label>
+          <label className={ui.label}>
+            <span>Phone Cell</span>
+            <input className={ui.input} name="cellPhone" value={fields.cellPhone} onChange={updateField} />
+          </label>
+          <label className={ui.label}>
+            <span>Insurance Plan</span>
+            <input className={ui.input} name="insurancePlan" value={fields.insurancePlan} onChange={updateField} />
+          </label>
+          <label className={ui.label}>
+            <span>Insurance Carrier</span>
+            <input className={ui.input} name="insuranceCarrier" value={fields.insuranceCarrier} onChange={updateField} />
+          </label>
+          <label className={ui.label}>
+            <span>Regular Provider</span>
+            <select className={ui.input} name="providerId" value={fields.providerId} onChange={updateField}>
+              <option value="">All Providers</option>
+              {providerOptions.map((provider) => (
+                <option value={provider.id} key={provider.id}>{provider.name}</option>
+              ))}
+            </select>
+          </label>
+          <label className={ui.label}>
+            <span>Billing Status</span>
+            <select className={ui.input} name="billingStatus" value={fields.billingStatus} onChange={updateField}>
+              <option value="">All Statuses</option>
+              {billingStatusOptions.map((status) => (
+                <option value={status} key={status}>{status}</option>
+              ))}
+            </select>
+          </label>
         </div>
+      </form>
 
-        <div className="flex items-center justify-end gap-4 border-t border-[#edf2f7] bg-[#fbfdff] px-[18px] py-4">
-          <button
-            className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[#d7e1ea] bg-white px-4 font-bold text-slate-600 transition hover:border-sky-200 hover:bg-[#f3f7ff] hover:text-[#2563eb]"
-            type="button"
-            onClick={onClose}
-          >
-            Close
-          </button>
-        </div>
-      </section>
-    </div>
+      {message ? <div className={ui.message}>{message}</div> : null}
+
+      <PatientSelectorTable
+        patients={results}
+        selectedPatientId={selectedPatientId}
+        currentPatientId={null}
+        onSelect={setSelectedPatientId}
+        onOpen={onSelect}
+        emptyMessage={searching ? 'Searching...' : 'Search results will appear here.'}
+      />
+    </ModalFrame>
   )
 }
 
-function PatientAlertModal({ activity, onClose }) {
-  const alertNotes = getAlertNotes(activity)
-  const fallbackNotes = alertNotes.length ? alertNotes : (activity?.notes || []).slice(0, 3)
-  const summaryRows = getAlertSummaryRows(activity)
+function SwitchPatientModal({ currentPatientId, onClose, onSelect }) {
+  const [patients, setPatients] = useState([])
+  const [selectedPatientId, setSelectedPatientId] = useState(currentPatientId ?? null)
+  const [loading, setLoading] = useState(true)
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    async function loadPreviousPatients() {
+      setLoading(true)
+      setMessage('')
+
+      try {
+        const response = await getPreviousPatients()
+
+        if (response.status !== 200 || !Array.isArray(response.data)) {
+          setPatients([])
+          setMessage(response?.data?.message || 'Unable to load previously opened patients.')
+          return
+        }
+
+        setPatients(response.data)
+        setSelectedPatientId(response.data[0]?.id ?? currentPatientId ?? null)
+
+        if (response.data.length === 0) {
+          setMessage('No previously opened patients.')
+        }
+      } catch (error) {
+        setPatients([])
+        setMessage(error.message || 'Unable to load previously opened patients.')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    void loadPreviousPatients()
+  }, [currentPatientId])
+
+  async function handleOpenSelected() {
+    if (!selectedPatientId) {
+      setMessage('Select a patient first.')
+      return
+    }
+
+    await onSelect(selectedPatientId)
+  }
 
   return (
-    <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-900/30 p-5" role="presentation">
-      <section
-        className="max-h-[calc(100vh-40px)] w-full max-w-[920px] overflow-auto rounded-lg border border-[#d9e2ea] bg-white shadow-[0_24px_70px_rgba(15,23,42,0.24)]"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="patient-alert-title"
-      >
-        <div className="flex items-center justify-between gap-4 border-b border-[#edf2f7] px-[18px] py-4">
-          <div>
-            <h2 id="patient-alert-title" className="m-0 text-[22px] font-extrabold text-mp-strong">Patient Alert</h2>
-            <p className="mt-[3px] mb-0 text-sm text-mp-muted">{fullName(activity?.patient) || 'Patient'}</p>
-          </div>
-          <button
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#d7e1ea] bg-white text-slate-600 transition hover:border-sky-200 hover:bg-[#f3f7ff] hover:text-[#2563eb]"
-            type="button"
-            aria-label="Close"
-            onClick={onClose}
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="2" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="grid gap-4 px-[18px] py-4">
-          <div className="grid gap-4 lg:grid-cols-[minmax(220px,0.85fr)_minmax(0,1.15fr)]">
-            <section className="grid content-start gap-3 rounded-lg border border-[#edf2f7] bg-[#fbfdff] p-3">
-              <div className="font-extrabold text-mp-strong">Current Flags</div>
-              {summaryRows.length ? (
-                <div className="grid gap-2">
-                  {summaryRows.map(([label, value]) => (
-                    <div className="grid items-start gap-2.5 [grid-template-columns:minmax(96px,0.9fr)_minmax(0,1.1fr)] max-[720px]:grid-cols-1" key={label}>
-                      <div className="text-xs font-bold uppercase text-[#7a8798]">{label}</div>
-                      <div className="min-w-0 text-right font-semibold text-mp-strong [overflow-wrap:anywhere] max-[720px]:text-left">{value}</div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <EmptyState message="No patient flags." />
-              )}
-            </section>
-
-            <section className="grid content-start gap-3 rounded-lg border border-[#edf2f7] bg-[#fbfdff] p-3">
-              <div className="font-extrabold text-mp-strong">{alertNotes.length ? 'Alert Notes' : 'Recent Notes'}</div>
-              {fallbackNotes.length ? (
-                <div className="grid gap-2.5">
-                  {fallbackNotes.map((note) => (
-                    <article className="grid gap-2 rounded-lg border border-[#edf2f7] bg-white p-3" key={note.id}>
-                      <div className="flex items-center justify-between gap-3 text-xs font-bold text-[#64748b]">
-                        <StatusPill value={note.noteType} />
-                        <span>{formatDateTime(note.createdAt)}</span>
-                      </div>
-                      <p className="m-0 leading-6 text-slate-700">{note.body}</p>
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <EmptyState message="No alerts on file." />
-              )}
-            </section>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-end gap-4 border-t border-[#edf2f7] bg-[#fbfdff] px-[18px] py-4">
-          <button
-            className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[#d7e1ea] bg-white px-4 font-bold text-slate-600 transition hover:border-sky-200 hover:bg-[#f3f7ff] hover:text-[#2563eb]"
-            type="button"
-            onClick={onClose}
-          >
+    <ModalFrame
+      title="Switch Patient"
+      subtitle="Previously opened patients"
+      onClose={onClose}
+      footer={(
+        <>
+          <button className={ui.secondaryButton} type="button" onClick={onClose}>
             Close
           </button>
-        </div>
-      </section>
-    </div>
+          <button className={cn(ui.primaryButton, 'ml-auto')} type="button" onClick={handleOpenSelected} disabled={!selectedPatientId}>
+            Open Patient
+          </button>
+        </>
+      )}
+    >
+      {message ? <div className={ui.message}>{message}</div> : null}
+
+      <PatientSelectorTable
+        patients={patients}
+        selectedPatientId={selectedPatientId}
+        currentPatientId={currentPatientId}
+        onSelect={setSelectedPatientId}
+        onOpen={onSelect}
+        emptyMessage={loading ? 'Loading previously opened patients...' : 'No previously opened patients.'}
+      />
+    </ModalFrame>
+  )
+}
+
+function PatientAlertModal({ patient, onClose, onSaved }) {
+  const [alertText, setAlertText] = useState(patient?.alert || '')
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState('')
+
+  async function handleSave() {
+    if (!patient?.id) {
+      setMessage('Select a patient first.')
+      return
+    }
+
+    setSaving(true)
+    setMessage('')
+
+    try {
+      const response = await updatePatientAlert(patient.id, alertText)
+
+      if (response.status !== 204) {
+        setMessage(response?.data?.message || 'Unable to save the patient alert.')
+        return
+      }
+
+      onSaved(alertText)
+      onClose()
+    } catch (error) {
+      setMessage(error.message || 'Unable to save the patient alert.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <ModalFrame
+      title="Patient Alert"
+      subtitle={fullName(patient) || 'Patient'}
+      onClose={onClose}
+      maxWidth="max-w-[720px]"
+      footer={(
+        <>
+          <button className={ui.secondaryButton} type="button" onClick={onClose}>
+            Close
+          </button>
+          <button className={cn(ui.secondaryButton, 'ml-auto')} type="button" onClick={() => setAlertText('')}>
+            Clear
+          </button>
+          <button className={ui.primaryButton} type="button" onClick={handleSave} disabled={saving}>
+            {saving ? 'Saving' : 'Save Alert'}
+          </button>
+        </>
+      )}
+    >
+      <label className={ui.label}>
+        <span>Alert</span>
+        <textarea
+          className={cn(ui.textarea, 'min-h-[220px]')}
+          value={alertText}
+          onChange={(event) => setAlertText(event.target.value)}
+        />
+      </label>
+
+      {message ? <div className={ui.message}>{message}</div> : null}
+    </ModalFrame>
   )
 }
 
 export default function PatientActivity() {
   const [accountValue, setAccountValue] = useState('')
   const [activity, setActivity] = useState(null)
-  const [searchResults, setSearchResults] = useState([])
   const [activeTab, setActiveTab] = useState('Demographics')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
@@ -1015,9 +1172,12 @@ export default function PatientActivity() {
   const [isSwitchPatientOpen, setIsSwitchPatientOpen] = useState(false)
   const [isAlertOpen, setIsAlertOpen] = useState(false)
   const [languages, setLanguages] = useState([])
-  const [recentPatients, setRecentPatients] = useState(() => readRecentPatients())
+  const [providerOptions, setProviderOptions] = useState([])
+  const [billingStatusOptions, setBillingStatusOptions] = useState([])
+  const [patientSearchSeed, setPatientSearchSeed] = useState('')
   const [selectedInsuranceId, setSelectedInsuranceId] = useState(null)
   const inputRef = useRef(null)
+  const autoOpenedAlertPatientIdRef = useRef(null)
 
   const patient = activity?.patient
   const contact = activity?.contact
@@ -1032,22 +1192,53 @@ export default function PatientActivity() {
   const showClinicalCards = activeTab === 'Clinical'
 
   useEffect(() => {
-    async function loadLanguages() {
+    async function loadReferenceData() {
       try {
-        const response = await getLanguages()
-        if (Array.isArray(response.data)) {
-          setLanguages(response.data)
+        const [languageResponse, searchOptionsResponse] = await Promise.all([
+          getLanguages(),
+          getPatientSearchOptions(),
+        ])
+
+        if (Array.isArray(languageResponse.data)) {
+          setLanguages(languageResponse.data)
         } else {
           setLanguages([])
-          setMessage(response?.message || 'Unable to load languages.')
+          setMessage(languageResponse?.data?.message || 'Unable to load languages.')
+        }
+
+        if (searchOptionsResponse.status === 200 && searchOptionsResponse.data) {
+          setProviderOptions(Array.isArray(searchOptionsResponse.data.providers) ? searchOptionsResponse.data.providers : [])
+          setBillingStatusOptions(Array.isArray(searchOptionsResponse.data.billingStatuses) ? searchOptionsResponse.data.billingStatuses : [])
+        } else {
+          setProviderOptions([])
+          setBillingStatusOptions([])
+          setMessage(searchOptionsResponse?.data?.message || 'Unable to load patient search options.')
         }
       } catch (error) {
-        setMessage(error.message || 'Unable to load languages.')
+        setMessage(error.message || 'Unable to load patient reference data.')
       }
     }
 
-    loadLanguages()
+    void loadReferenceData()
   }, [])
+
+  useEffect(() => {
+    const patientId = activity?.patient?.id
+
+    if (!patientId) {
+      return
+    }
+
+    if (hasPatientAlert(activity) && autoOpenedAlertPatientIdRef.current !== String(patientId)) {
+      setIsAlertOpen(true)
+      autoOpenedAlertPatientIdRef.current = String(patientId)
+      return
+    }
+
+    if (!hasPatientAlert(activity)) {
+      autoOpenedAlertPatientIdRef.current = String(patientId)
+    }
+  }, [activity])
 
   const keyInfo = useMemo(() => ([
     ['Account', patient?.id],
@@ -1095,13 +1286,7 @@ export default function PatientActivity() {
 
       setSelectedInsuranceId(null)
       setActivity(response.data)
-      setSearchResults([])
       setAccountValue(String(response.data.patient.id))
-      setRecentPatients((currentPatients) => {
-        const nextPatients = rememberRecentPatient(currentPatients, response.data)
-        writeRecentPatients(nextPatients)
-        return nextPatients
-      })
     } catch (error) {
       setMessage(error.message)
     } finally {
@@ -1123,25 +1308,8 @@ export default function PatientActivity() {
       return
     }
 
-    setLoading(true)
-    setMessage('')
-
-    try {
-      const results = await searchPatients(query)
-      if (results.status === 200) {
-        setSearchResults(results.data)
-        if (results.data.length === 1) {
-          await loadActivity(results.data[0].id)
-        } else if (results.data.length === 0) {
-          setMessage('No matching patients found.')
-        }
-      }
-      else setMessage(results.message)
-    } catch (error) {
-      setMessage(error.message)
-    } finally {
-      setLoading(false)
-    }
+    setPatientSearchSeed(query)
+    setIsPatientSearchOpen(true)
   }
 
   async function handlePatientCreated(createdPatient) {
@@ -1153,7 +1321,24 @@ export default function PatientActivity() {
     setIsPatientSearchOpen(false)
     setIsSwitchPatientOpen(false)
     setIsAlertOpen(false)
+    setPatientSearchSeed('')
     await loadActivity(patientId)
+  }
+
+  function handleAlertSaved(nextAlert) {
+    setActivity((currentActivity) => {
+      if (!currentActivity) {
+        return currentActivity
+      }
+
+      return {
+        ...currentActivity,
+        patient: {
+          ...currentActivity.patient,
+          alert: nextAlert.trim(),
+        },
+      }
+    })
   }
 
   function openAlertPanel() {
@@ -1206,7 +1391,10 @@ export default function PatientActivity() {
               className={cn(ui.secondaryButton, 'max-[520px]:w-full max-[520px]:justify-start')}
               title="Patient search"
               type="button"
-              onClick={() => setIsPatientSearchOpen(true)}
+              onClick={() => {
+                setPatientSearchSeed('')
+                setIsPatientSearchOpen(true)
+              }}
             >
               <svg viewBox="0 0 24 24" aria-hidden="true" className="h-[18px] w-[18px] shrink-0 fill-none stroke-current stroke-2">
                 <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" strokeWidth="2" />
@@ -1239,8 +1427,13 @@ export default function PatientActivity() {
 
         {isPatientSearchOpen ? (
           <PatientSearchModal
-            initialQuery={accountValue}
-            onClose={() => setIsPatientSearchOpen(false)}
+            initialQuery={patientSearchSeed}
+            providerOptions={providerOptions}
+            billingStatusOptions={billingStatusOptions}
+            onClose={() => {
+              setIsPatientSearchOpen(false)
+              setPatientSearchSeed('')
+            }}
             onSelect={handlePatientSelected}
           />
         ) : null}
@@ -1248,7 +1441,6 @@ export default function PatientActivity() {
         {isSwitchPatientOpen ? (
           <SwitchPatientModal
             currentPatientId={activity?.patient?.id}
-            recentPatients={recentPatients}
             onClose={() => setIsSwitchPatientOpen(false)}
             onSelect={handlePatientSelected}
           />
@@ -1256,27 +1448,23 @@ export default function PatientActivity() {
 
         {isAlertOpen && activity ? (
           <PatientAlertModal
-            activity={activity}
+            patient={activity.patient}
             onClose={() => setIsAlertOpen(false)}
+            onSaved={handleAlertSaved}
           />
         ) : null}
 
         {message ? <div className={ui.message}>{message}</div> : null}
 
-        {searchResults.length > 1 ? (
-          <div className="my-2 grid gap-2">
-            {searchResults.map((result) => (
-              <button
-                type="button"
-                className="flex justify-between gap-4 rounded-lg border border-mp-line bg-white px-3.5 py-3 text-left text-mp-text transition hover:bg-[#eef5ff] max-[720px]:grid max-[720px]:grid-cols-1"
-                key={result.id}
-                onClick={() => loadActivity(result.id)}
-              >
-                <span className="font-bold text-mp-strong">{searchResultName(result)}</span>
-                <span>{searchResultMeta(result)}</span>
-              </button>
-            ))}
-          </div>
+        {hasPatientAlert(activity) ? (
+          <button
+            type="button"
+            className={cn(ui.warning, 'flex w-full items-start justify-between gap-3 text-left')}
+            onClick={openAlertPanel}
+          >
+            <span className="min-w-0 [overflow-wrap:anywhere]">{activity.patient.alert}</span>
+            <span className="shrink-0 font-extrabold uppercase">Edit</span>
+          </button>
         ) : null}
 
         {!activity ? (
