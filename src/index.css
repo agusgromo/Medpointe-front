@@ -1510,6 +1510,71 @@ a {
   grid-column: span 2;
 }
 
+.schedule-patient-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.schedule-picker-clear {
+  min-height: 40px;
+  white-space: nowrap;
+}
+
+.schedule-picker-help {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.schedule-picker-results {
+  display: grid;
+  gap: 8px;
+  max-height: 220px;
+  margin-top: 8px;
+  overflow: auto;
+}
+
+.schedule-picker-row {
+  display: grid;
+  gap: 3px;
+  padding: 11px 12px;
+  border: 1px solid var(--mp-line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--mp-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.schedule-picker-row:hover {
+  background: #eef5ff;
+}
+
+.schedule-picker-row strong,
+.schedule-selected-patient b {
+  color: var(--mp-strong);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.schedule-picker-row span,
+.schedule-selected-patient span {
+  color: #64748b;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.schedule-selected-patient {
+  display: grid;
+  gap: 3px;
+  padding: 11px 12px;
+  border: 1px solid #dbe7f2;
+  border-radius: 8px;
+  background: #f8fbff;
+}
+
 .schedule-textarea {
   min-height: 78px;
   padding-top: 9px;
@@ -2068,6 +2133,14 @@ a {
 
   .schedule-form-grid label.span-2 {
     grid-column: auto;
+  }
+
+  .schedule-patient-picker {
+    grid-template-columns: 1fr;
+  }
+
+  .schedule-picker-clear {
+    width: 100%;
   }
 
   .schedule-topbar,

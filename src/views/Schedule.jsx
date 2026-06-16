@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import MainLayout from '../components/MainLayout'
+import { searchPatients } from '../services/patients'
 import {
   createAppointment,
   getSchedule,
@@ -63,6 +64,34 @@ function formatDate(value) {
     day: '2-digit',
     year: 'numeric',
   })
+}
+
+function patientSearchName(patient, includeId = false) {
+  if (!patient) {
+    return ''
+  }
+
+  const baseName = [
+    patient.lastName ? `${patient.lastName},` : '',
+    patient.firstName,
+    patient.middleName,
+  ].filter(Boolean).join(' ')
+
+  return includeId ? `${baseName} (#${patient.id})` : baseName
+}
+
+function patientSearchDetails(patient) {
+  if (!patient) {
+    return ''
+  }
+
+  return [
+    formatDate(patient.dateOfBirth),
+    humanize(patient.sexAtBirth),
+    patient.mobilePhone,
+    patient.primaryProviderName,
+    patient.primaryLocationName,
+  ].filter(Boolean).join(' | ')
 }
 
 function toNumberOrNull(value) {
@@ -136,6 +165,11 @@ export default function Schedule() {
   const [activeAppointmentId, setActiveAppointmentId] = useState(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [patientSearchTerm, setPatientSearchTerm] = useState('')
+  const [patientSearchLoading, setPatientSearchLoading] = useState(false)
+  const [patientSearchComplete, setPatientSearchComplete] = useState(false)
+  const [patientResults, setPatientResults] = useState([])
+  const [selectedPatient, setSelectedPatient] = useState(null)
   const [message, setMessage] = useState('')
   const [form, setForm] = useState({
     patientId: '',
@@ -171,6 +205,18 @@ export default function Schedule() {
 
     return { checkedIn, completed, openBilling }
   }, [appointments])
+
+  const selectedPatientLabel = selectedPatient
+    ? patientSearchName(selectedPatient, true)
+    : ''
+  const patientSearchQuery = patientSearchTerm.trim()
+  const canSearchPatients = Boolean(patientSearchQuery)
+    && (patientSearchQuery.length >= 2 || /^\d+$/.test(patientSearchQuery))
+  const showPatientNoResults = canSearchPatients
+    && patientSearchComplete
+    && !patientSearchLoading
+    && !selectedPatient
+    && patientResults.length === 0
 
   const loadSchedule = useCallback(async () => {
     setLoading(true)
@@ -225,6 +271,47 @@ export default function Schedule() {
 
     loadOptions()
   }, [])
+
+  useEffect(() => {
+    if (!canSearchPatients || !patientSearchQuery || patientSearchTerm === selectedPatientLabel) {
+      return undefined
+    }
+
+    let ignore = false
+    const timeoutId = setTimeout(async () => {
+      setPatientSearchLoading(true)
+
+      try {
+        const response = await searchPatients(patientSearchQuery)
+
+        if (ignore) {
+          return
+        }
+
+        if (response.status === 200 && Array.isArray(response.data)) {
+          setPatientResults(response.data)
+          setPatientSearchComplete(true)
+        } else {
+          setPatientResults([])
+          setPatientSearchComplete(true)
+        }
+      } catch {
+        if (!ignore) {
+          setPatientResults([])
+          setPatientSearchComplete(true)
+        }
+      } finally {
+        if (!ignore) {
+          setPatientSearchLoading(false)
+        }
+      }
+    }, 220)
+
+    return () => {
+      ignore = true
+      clearTimeout(timeoutId)
+    }
+  }, [canSearchPatients, patientSearchQuery, patientSearchTerm, selectedPatientLabel])
 
   useEffect(() => {
     let ignore = false
@@ -300,8 +387,47 @@ export default function Schedule() {
     setForm((current) => ({ ...current, [field]: value }))
   }
 
+  function selectPatient(patient) {
+    setSelectedPatient(patient)
+    setPatientSearchTerm(patientSearchName(patient, true))
+    setPatientResults([])
+    setPatientSearchLoading(false)
+    setPatientSearchComplete(false)
+    setForm((current) => ({ ...current, patientId: String(patient.id) }))
+  }
+
+  function clearSelectedPatient() {
+    setSelectedPatient(null)
+    setPatientSearchTerm('')
+    setPatientResults([])
+    setPatientSearchLoading(false)
+    setPatientSearchComplete(false)
+    setForm((current) => ({ ...current, patientId: '' }))
+  }
+
+  function updatePatientSearch(value) {
+    setPatientSearchTerm(value)
+    setPatientSearchComplete(false)
+
+    if (selectedPatient && value !== selectedPatientLabel) {
+      setSelectedPatient(null)
+      setForm((current) => ({ ...current, patientId: '' }))
+    }
+
+    if (!value.trim() || (value.trim().length < 2 && !/^\d+$/.test(value.trim()))) {
+      setPatientResults([])
+      setPatientSearchLoading(false)
+    }
+  }
+
   async function handleCreateAppointment(event) {
     event.preventDefault()
+
+    if (!form.patientId) {
+      setMessage('Select a patient before creating an appointment.')
+      return
+    }
+
     setSaving(true)
     setMessage('')
 
@@ -325,6 +451,11 @@ export default function Schedule() {
           reason: '',
           notes: '',
         }))
+        setSelectedPatient(null)
+        setPatientSearchTerm('')
+        setPatientResults([])
+        setPatientSearchLoading(false)
+        setPatientSearchComplete(false)
 
         if (form.date === selectedDate) {
           await loadSchedule()
@@ -519,22 +650,65 @@ export default function Schedule() {
               <div className="schedule-panel-head">
                 <div>
                   <div className="schedule-panel-title">New Appointment</div>
-                  <div className="schedule-panel-subtitle">Account-based scheduling</div>
+                  <div className="schedule-panel-subtitle">Patient search and scheduling</div>
                 </div>
                 <PlusIcon />
               </div>
 
               <div className="schedule-form-grid">
-                <label>
-                  <span>Patient Account</span>
-                  <input
-                    className="w-input"
-                    type="number"
-                    min="1"
-                    value={form.patientId}
-                    onChange={(event) => updateForm('patientId', event.target.value)}
-                    required
-                  />
+                <label className="span-2">
+                  <span>Patient</span>
+                  <div className="schedule-patient-picker">
+                    <input
+                      className="w-input"
+                      type="text"
+                      value={patientSearchTerm}
+                      onChange={(event) => updatePatientSearch(event.target.value)}
+                      placeholder="Search by account or patient name"
+                    />
+                    {selectedPatient ? (
+                      <button
+                        className="btn-outline schedule-picker-clear"
+                        type="button"
+                        onClick={clearSelectedPatient}
+                      >
+                        Clear
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {selectedPatient ? (
+                    <div className="schedule-selected-patient">
+                      <b>{patientSearchName(selectedPatient, true)}</b>
+                      <span>{patientSearchDetails(selectedPatient)}</span>
+                    </div>
+                  ) : (
+                    <div className="schedule-picker-help">
+                      {patientSearchLoading
+                        ? 'Searching patients...'
+                        : 'Search by last name or account number, then choose a patient.'}
+                    </div>
+                  )}
+
+                  {!selectedPatient && patientResults.length > 0 ? (
+                    <div className="schedule-picker-results">
+                      {patientResults.map((patient) => (
+                        <button
+                          className="schedule-picker-row"
+                          key={patient.id}
+                          type="button"
+                          onClick={() => selectPatient(patient)}
+                        >
+                          <strong>{patientSearchName(patient, true)}</strong>
+                          <span>{patientSearchDetails(patient)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {showPatientNoResults ? (
+                    <div className="schedule-picker-help">No matching patients found.</div>
+                  ) : null}
                 </label>
 
                 <label>
@@ -648,7 +822,7 @@ export default function Schedule() {
                 </label>
               </div>
 
-              <button className="w-button schedule-submit" type="submit" disabled={saving}>
+              <button className="w-button schedule-submit" type="submit" disabled={saving || !form.patientId}>
                 {saving ? 'Saving' : 'Create Appointment'}
               </button>
             </form>
