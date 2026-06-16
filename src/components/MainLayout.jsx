@@ -8,7 +8,7 @@ const NAV_ITEMS = [
   { key: 'activity', label: 'Patient Activity', to: '/patient-activity', icon: ActivityIcon },
   { key: 'schedule', label: 'Schedule', to: '/schedule', icon: CalendarIcon },
   { key: 'billing', label: 'Billing', to: '/billing', icon: BillingIcon },
-  { key: 'clinical', label: 'Clinical', icon: ClinicalIcon, disabled: true },
+  { key: 'clinical', label: 'Clinical', to: '/clinical', icon: ClinicalIcon },
   { key: 'inbox', label: 'Inbox', icon: InboxIcon, disabled: true },
   { key: 'settings', label: 'Settings', icon: SettingsIcon, disabled: true },
 ]

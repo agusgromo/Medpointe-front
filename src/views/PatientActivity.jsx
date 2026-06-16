@@ -1296,6 +1296,7 @@ export default function PatientActivity() {
   const [selectedInsuranceId, setSelectedInsuranceId] = useState(null)
   const inputRef = useRef(null)
   const autoOpenedAlertPatientIdRef = useRef(null)
+  const routeAction = searchParams.get('action')?.trim().toLowerCase() || ''
   const routePatientId = searchParams.get('patientId')?.trim() || ''
 
   const patient = activity?.patient
@@ -1390,6 +1391,19 @@ export default function PatientActivity() {
     ['Classification', patient?.classification],
     ['Category', patient?.category],
   ]), [patient, primaryPharmacy])
+
+  useEffect(() => {
+    if (routeAction !== 'new') {
+      return undefined
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setIsAddPatientOpen(true)
+      navigate('/patient-activity', { replace: true })
+    }, 0)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [navigate, routeAction])
 
   const loadActivity = useCallback(async (patientId) => {
     setLoading(true)

@@ -77,7 +77,6 @@ export default function Dashboard() {
   const [officeOptions, setOfficeOptions] = useState([])
   const [selectedOfficeId, setSelectedOfficeId] = useState('')
   const [scheduleRows, setScheduleRows] = useState([])
-  const [scheduleSearch, setScheduleSearch] = useState('')
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -139,25 +138,11 @@ export default function Dashboard() {
   }, [selectedDate, selectedOfficeId])
 
   const selectedOffice = officeOptions.find((office) => String(office.id) === String(selectedOfficeId))
-  const filteredScheduleRows = useMemo(() => {
-    const term = scheduleSearch.trim().toLowerCase()
-
-    if (term.length < 3) {
-      return scheduleRows
-    }
-
-    return scheduleRows.filter((row) => String(row.patientName || '').toLowerCase().includes(term))
-  }, [scheduleRows, scheduleSearch])
   const metrics = useMemo(() => ({
     appointments: scheduleRows.length,
     notesPending: scheduleRows.filter(isPendingNote).length,
     billingOpen: scheduleRows.filter(isBillingOpen).length,
   }), [scheduleRows])
-  const scheduleSearchIsActive = scheduleSearch.trim().length >= 3
-  const visibleScheduleCount = filteredScheduleRows.length
-  const scheduleEmptyMessage = scheduleSearchIsActive
-    ? 'No matching patients in the selected office schedule.'
-    : 'No appointments scheduled.'
 
   return (
     <MainLayout>
@@ -297,24 +282,14 @@ export default function Dashboard() {
           </div>
 
           <div id="dash-sched" className="rounded-lg border border-mp-line bg-white p-3.5">
-            <div className="mt-2.5 mb-2.5 grid gap-2.5 lg:grid-cols-[minmax(0,1fr)_minmax(220px,260px)_auto] lg:items-center">
+            <div className="mt-2.5 mb-2.5 flex items-center justify-between gap-3">
               <div>
                 <div className="font-semibold text-mp-strong">Schedule</div>
                 <div className="text-xs font-semibold text-mp-muted">
-                  {visibleScheduleCount} visible {visibleScheduleCount === 1 ? 'appointment' : 'appointments'}
+                  {scheduleRows.length} {scheduleRows.length === 1 ? 'appointment' : 'appointments'}
                 </div>
               </div>
-              <label className="grid gap-1">
-                <span className="text-[11px] font-extrabold uppercase tracking-[0.02em] text-slate-500">Search Patients</span>
-                <input
-                  className="min-h-9 rounded-md border border-[#d9e2ea] bg-white px-2.5 py-1.5 text-sm font-semibold text-slate-900 outline-none"
-                  type="text"
-                  value={scheduleSearch}
-                  onChange={(event) => setScheduleSearch(event.target.value)}
-                  placeholder="Min 3 letters"
-                />
-              </label>
-              <div className="text-xs font-semibold text-mp-muted lg:text-right">
+              <div className="text-xs font-semibold text-mp-muted text-right">
                 {selectedOffice?.name || 'Office'}
               </div>
             </div>
@@ -331,7 +306,7 @@ export default function Dashboard() {
               </div>
 
               <div className="max-h-[420px] overflow-auto">
-                {filteredScheduleRows.map((row, index) => (
+                {scheduleRows.map((row, index) => (
                   <button
                     type="button"
                     className={`grid w-full cursor-pointer grid-cols-[80px_28px_40px_minmax(150px,1.2fr)_minmax(220px,2fr)_28px_28px] items-center gap-x-3 border-t border-[#eef2f7] p-2 text-left hover:bg-[#eef5ff] disabled:cursor-default disabled:hover:bg-white max-[720px]:min-w-[760px] ${
@@ -359,8 +334,8 @@ export default function Dashboard() {
                   </button>
                 ))}
 
-                {filteredScheduleRows.length === 0 ? (
-                  <div className={ui.empty}>{scheduleEmptyMessage}</div>
+                {scheduleRows.length === 0 ? (
+                  <div className={ui.empty}>No appointments scheduled.</div>
                 ) : null}
               </div>
             </div>

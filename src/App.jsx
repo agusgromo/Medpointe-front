@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import ProtectedRoute from './components/ProtectedRoute'
 import Billing from './views/Billing'
+import Clinical from './views/Clinical'
 import Dashboard from './views/Dashboard'
 import Login from './views/Login'
 import PatientActivity from './views/PatientActivity'
@@ -39,6 +40,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <Billing />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/clinical"
+        element={
+          <ProtectedRoute>
+            <Clinical />
           </ProtectedRoute>
         }
       />

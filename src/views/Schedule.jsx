@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
 import { cn, statusPillClasses, ui } from '../components/ui'
-import { searchPatients } from '../services/patients'
+import { getPreviousPatients, searchPatients } from '../services/patients'
 import {
   createAppointment,
   getSchedule,
@@ -162,7 +163,203 @@ function PlusIcon() {
   )
 }
 
+function PatientPickerModal({ onClose, onCreateNew, onSelectPatient }) {
+  const [query, setQuery] = useState('')
+  const [patients, setPatients] = useState([])
+  const [selectedPatientId, setSelectedPatientId] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [message, setMessage] = useState('')
+
+  const selectedPatient = patients.find((patient) => String(patient.id) === String(selectedPatientId)) || null
+
+  const loadPrevious = useCallback(async () => {
+    setLoading(true)
+    setMessage('')
+
+    try {
+      const response = await getPreviousPatients()
+
+      if (response.status !== 200 || !Array.isArray(response.data)) {
+        setPatients([])
+        setSelectedPatientId(null)
+        setMessage(response?.data?.message || 'Unable to load previously opened patients.')
+        return
+      }
+
+      setPatients(response.data)
+      setSelectedPatientId(response.data[0]?.id ?? null)
+
+      if (response.data.length === 0) {
+        setMessage('No previously opened patients.')
+      }
+    } catch (error) {
+      setPatients([])
+      setSelectedPatientId(null)
+      setMessage(error.message || 'Unable to load previously opened patients.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const loadSearch = useCallback(async (searchValue) => {
+    const trimmed = String(searchValue || '').trim()
+
+    if (!trimmed) {
+      await loadPrevious()
+      return
+    }
+
+    setLoading(true)
+    setMessage('')
+
+    try {
+      const response = await searchPatients(trimmed)
+
+      if (response.status !== 200 || !Array.isArray(response.data)) {
+        setPatients([])
+        setSelectedPatientId(null)
+        setMessage(response?.data?.message || 'Unable to search patients.')
+        return
+      }
+
+      setPatients(response.data)
+      setSelectedPatientId(response.data[0]?.id ?? null)
+
+      if (response.data.length === 0) {
+        setMessage('No matching patients found.')
+      }
+    } catch (error) {
+      setPatients([])
+      setSelectedPatientId(null)
+      setMessage(error.message || 'Unable to search patients.')
+    } finally {
+      setLoading(false)
+    }
+  }, [loadPrevious])
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void loadPrevious()
+    }, 0)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [loadPrevious])
+
+  function handleSubmit(event) {
+    event.preventDefault()
+    void loadSearch(query)
+  }
+
+  function handleUseSelected() {
+    if (!selectedPatient) {
+      setMessage('Select a patient first.')
+      return
+    }
+
+    onSelectPatient(selectedPatient)
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 z-[70] grid place-items-center bg-slate-900/30 p-5 max-[520px]:items-stretch max-[520px]:p-2.5">
+      <section className="max-h-[calc(100vh-40px)] w-full max-w-[760px] overflow-auto rounded-lg border border-[#d9e2ea] bg-white shadow-[0_24px_70px_rgba(15,23,42,0.24)] max-[520px]:max-h-[calc(100vh-20px)]">
+        <div className="flex items-center justify-between gap-4 border-b border-[#edf2f7] px-[18px] py-4 max-[520px]:px-3.5">
+          <div>
+            <h2 className="m-0 text-[22px] font-extrabold text-mp-strong">Select Patient</h2>
+            <p className="mt-[3px] mb-0 text-sm text-[#64748b]">Search or choose a previously opened patient</p>
+          </div>
+          <button className={ui.iconButton} type="button" aria-label="Close" onClick={onClose}>
+            <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4">
+              <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="2" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="grid gap-4 px-[18px] py-4 max-[520px]:px-3.5">
+          <form className="grid gap-3" onSubmit={handleSubmit}>
+            <div className="grid items-end gap-2.5 md:grid-cols-[minmax(0,1fr)_auto_auto]">
+              <label className={ui.label}>
+                <span>Search</span>
+                <input
+                  className={ui.input}
+                  type="text"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search: last,first | acct | DOB"
+                />
+              </label>
+              <button className={cn(ui.secondaryButton, 'min-h-10 whitespace-nowrap max-md:w-full')} type="button" onClick={() => void loadPrevious()}>
+                Previous
+              </button>
+              <button className={cn(ui.primaryButton, 'min-h-10 whitespace-nowrap max-md:w-full')} type="submit" disabled={loading}>
+                {loading ? 'Loading' : 'Go'}
+              </button>
+            </div>
+          </form>
+
+          {message ? <div className={ui.message}>{message}</div> : null}
+
+          <div className="overflow-hidden rounded-lg border border-mp-line bg-white">
+            <div className="grid grid-cols-[minmax(0,1.6fr)_132px_88px_96px] gap-0 border-b border-mp-line bg-[#f8fafc] px-3 py-2 text-[11px] font-extrabold uppercase tracking-wide text-[#64748b] max-[760px]:hidden">
+              <div>Name</div>
+              <div>DOB</div>
+              <div>Sex</div>
+              <div>Acct</div>
+            </div>
+
+            <div className="max-h-[360px] overflow-auto">
+              {patients.length ? (
+                patients.map((patient) => {
+                  const isSelected = String(patient.id) === String(selectedPatientId)
+
+                  return (
+                    <button
+                      type="button"
+                      className={cn(
+                        'grid w-full grid-cols-[minmax(0,1.6fr)_132px_88px_96px] items-center gap-0 border-t border-[#eef2f7] px-3 py-3 text-left text-sm text-mp-text first:border-t-0 hover:bg-[#f8fbff] max-[760px]:grid-cols-1 max-[760px]:gap-1',
+                        isSelected ? 'bg-[#eef5ff]' : 'bg-white',
+                      )}
+                      key={patient.id}
+                      onClick={() => setSelectedPatientId(patient.id)}
+                      onDoubleClick={() => {
+                        onSelectPatient(patient)
+                        onClose()
+                      }}
+                    >
+                      <div className="min-w-0 font-extrabold text-mp-strong [overflow-wrap:anywhere]">
+                        {patientSearchName(patient)}
+                      </div>
+                      <div className="text-[#475569] max-[760px]:text-xs max-[760px]:font-semibold max-[760px]:uppercase max-[760px]:text-[#64748b]">{formatDate(patient.dateOfBirth) || '-'}</div>
+                      <div className="text-[#475569] max-[760px]:text-xs max-[760px]:font-semibold max-[760px]:uppercase max-[760px]:text-[#64748b]">{humanize(patient.sexAtBirth) || '-'}</div>
+                      <div className="text-[#475569] max-[760px]:text-xs max-[760px]:font-semibold max-[760px]:uppercase max-[760px]:text-[#64748b]">{patient.id || '-'}</div>
+                    </button>
+                  )
+                })
+              ) : (
+                <div className={ui.empty}>{loading ? 'Loading...' : 'No results'}</div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-4 border-t border-[#edf2f7] bg-[#fbfdff] px-[18px] py-4 max-[520px]:px-3.5">
+          <button className={ui.secondaryButton} type="button" onClick={onClose}>
+            Cancel
+          </button>
+          <button className={ui.secondaryButton} type="button" onClick={onCreateNew}>
+            New Patient
+          </button>
+          <button className={cn(ui.primaryButton, 'ml-auto')} type="button" onClick={handleUseSelected}>
+            Use Patient
+          </button>
+        </div>
+      </section>
+    </div>
+  )
+}
+
 export default function Schedule() {
+  const navigate = useNavigate()
   const [selectedDate, setSelectedDate] = useState(inputDate())
   const [filters, setFilters] = useState({ providerId: '', locationId: '', status: '' })
   const [options, setOptions] = useState(emptyOptions)
@@ -175,6 +372,7 @@ export default function Schedule() {
   const [patientSearchComplete, setPatientSearchComplete] = useState(false)
   const [patientResults, setPatientResults] = useState([])
   const [selectedPatient, setSelectedPatient] = useState(null)
+  const [isPatientPickerOpen, setIsPatientPickerOpen] = useState(false)
   const [message, setMessage] = useState('')
   const [form, setForm] = useState({
     patientId: '',
@@ -410,6 +608,19 @@ export default function Schedule() {
     setForm((current) => ({ ...current, patientId: '' }))
   }
 
+  function openPatientActivity(patientId) {
+    if (!patientId) {
+      return
+    }
+
+    navigate(`/patient-activity?patientId=${patientId}`)
+  }
+
+  function openNewPatientFlow() {
+    setIsPatientPickerOpen(false)
+    navigate('/patient-activity?action=new')
+  }
+
   function updatePatientSearch(value) {
     setPatientSearchTerm(value)
     setPatientSearchComplete(false)
@@ -498,6 +709,14 @@ export default function Schedule() {
   return (
     <MainLayout>
       <section className="grid w-full gap-4">
+        {isPatientPickerOpen ? (
+          <PatientPickerModal
+            onClose={() => setIsPatientPickerOpen(false)}
+            onCreateNew={openNewPatientFlow}
+            onSelectPatient={selectPatient}
+          />
+        ) : null}
+
         <div className="grid gap-4 rounded-lg border border-mp-line bg-white p-3.5 lg:flex lg:items-end lg:justify-between">
           <div className="flex min-w-[220px] items-center gap-3">
             <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-[#eef5ff] text-[#2563eb] [&_svg]:h-5 [&_svg]:w-5 [&_svg]:fill-none [&_svg]:stroke-current [&_svg]:stroke-[1.8] [&_svg]:stroke-linecap-round [&_svg]:stroke-linejoin-round">
@@ -616,7 +835,20 @@ export default function Schedule() {
                         <div className="text-xs text-[#64748b]">{appointmentDuration(appointment)}</div>
                       </td>
                       <td className="px-3 py-2.5 align-middle">
-                        <div className="font-extrabold text-mp-strong">{appointment.patientName || 'Unassigned'}</div>
+                        {appointment.patientId ? (
+                          <button
+                            className="font-extrabold text-[#2563eb]"
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              openPatientActivity(appointment.patientId)
+                            }}
+                          >
+                            {appointment.patientName || 'Unassigned'}
+                          </button>
+                        ) : (
+                          <div className="font-extrabold text-mp-strong">{appointment.patientName || 'Unassigned'}</div>
+                        )}
                         <div className="text-xs text-[#64748b]">
                           #{appointment.patientId || '-'} {appointment.mobilePhone || ''}
                         </div>
@@ -667,7 +899,7 @@ export default function Schedule() {
               <div className="grid gap-3 max-[520px]:grid-cols-1 md:grid-cols-2">
                 <label className={cn(ui.label, 'md:col-span-2')}>
                   <span>Patient</span>
-                  <div className="grid items-center gap-2 max-[520px]:grid-cols-1 [grid-template-columns:minmax(0,1fr)_auto]">
+                  <div className="grid items-center gap-2 max-[520px]:grid-cols-1 [grid-template-columns:minmax(0,1fr)_auto_auto]">
                     <input
                       className={ui.input}
                       type="text"
@@ -675,6 +907,13 @@ export default function Schedule() {
                       onChange={(event) => updatePatientSearch(event.target.value)}
                       placeholder="Search by account or patient name"
                     />
+                    <button
+                      className={cn(ui.secondaryButton, 'min-h-10 whitespace-nowrap max-[520px]:w-full')}
+                      type="button"
+                      onClick={() => setIsPatientPickerOpen(true)}
+                    >
+                      Patient Picker
+                    </button>
                     {selectedPatient ? (
                       <button
                         className={cn(ui.secondaryButton, 'min-h-10 whitespace-nowrap max-[520px]:w-full')}
@@ -866,6 +1105,15 @@ export default function Schedule() {
                       <b className="min-w-0 font-bold text-mp-strong [overflow-wrap:anywhere]">{value}</b>
                     </div>
                   ))}
+                  {activeAppointment.patientId ? (
+                    <button
+                      className={cn(ui.secondaryButton, 'mt-2')}
+                      type="button"
+                      onClick={() => openPatientActivity(activeAppointment.patientId)}
+                    >
+                      Open Patient Activity
+                    </button>
+                  ) : null}
                 </div>
               ) : (
                 <div className={ui.empty}>Select an appointment.</div>
