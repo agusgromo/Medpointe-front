@@ -641,6 +641,10 @@ export default function PatientActivity() {
 
     try {
       const response = await getPatientActivity(patientId)
+      if(response.status !== 200){
+        setMessage(response.data.message);
+        return
+      }
       setSelectedInsuranceId(null)
       setActivity(response.data)
       setSearchResults([])
