@@ -2,7 +2,7 @@ import BrandLockup from './BrandLockup'
 
 export default function AppShell({ children }) {
   return (
-    <main className="grid min-h-svh grid-cols-[260px_1fr] bg-surface max-[860px]:grid-cols-1">
+    <main className="grid min-h-screen grid-cols-[260px_1fr] bg-surface max-[860px]:grid-cols-1">
       <aside className="flex flex-col gap-9 border-r border-border-soft bg-white p-7 max-[860px]:gap-5 max-[860px]:border-r-0 max-[860px]:border-b">
         <BrandLockup compact />
         <nav className="grid gap-2" aria-label="Primary">

@@ -51,24 +51,31 @@ export default function Login() {
   }
 
   return (
-    <main className="legacy-login-stage">
-      <div className="welcome-container">
-        <h1 className="welcome">Welcome!</h1>
-        <p className="welcome-sub">
+    <main className="relative flex min-h-screen w-full items-center overflow-x-hidden bg-[#4190f5] px-4 py-6 text-[#425166] [background-image:linear-gradient(343deg,rgba(65,144,245,0)_0%,rgba(152,197,255,0.79)_100%)] sm:px-6 lg:px-0">
+      <div className="mx-auto mb-7 w-full max-w-[700px] px-5 text-center lg:absolute lg:left-[50px] lg:right-[calc(700px+10vw+40px)] lg:top-1/2 lg:mb-0 lg:max-w-none lg:-translate-y-1/2 lg:px-0 lg:text-left xl:left-[120px] xl:right-[calc(700px+5vw)] 2xl:left-[120px] 2xl:min-w-[310px]">
+        <h1 className="m-0 mb-3 font-[Roboto] text-5xl font-extrabold leading-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.08)] sm:text-[56px] xl:text-[60px]">
+          Welcome!
+        </h1>
+        <p className="m-0 text-lg leading-[1.4] text-white sm:text-xl xl:text-2xl">
           Please sign in to access your patients and appointments.
         </p>
       </div>
 
-      <section className="panel" aria-labelledby="login-title">
-        <div className="panel-inner">
-          <div className="brand">
+      <section
+        className="mx-auto w-full max-w-[700px] rounded-[32px] bg-[#f6f6fa] shadow-[0_24px_60px_rgba(15,23,42,0.12)] lg:fixed lg:right-[5vw] lg:bottom-0 lg:max-h-screen lg:w-[700px] lg:overflow-y-auto lg:rounded-t-[45px] lg:rounded-b-none lg:pb-[60px] xl:right-[5vw]"
+        aria-labelledby="login-title"
+      >
+        <div className="relative w-full px-5 pt-8 pb-7 sm:px-6 sm:pt-10 sm:pb-8 lg:px-6 lg:pt-[60px]">
+          <div className="mx-auto mb-7 w-[200px] sm:w-[240px] lg:mb-10 lg:w-[280px]">
             <img className="block h-full w-full" src={logo} alt="MedPointe" />
           </div>
 
-          <h2 className="title" id="login-title">
+          <h2 className="mb-4 text-center font-[Roboto] text-[40px] font-medium text-[#425166] sm:text-5xl lg:mb-5 lg:text-[55px]" id="login-title">
             Sign In
           </h2>
-          <p className="subtitle">Enter your credentials to access the dashboard.</p>
+          <p className="mx-auto mb-7 max-w-[620px] px-2 text-center text-lg leading-6 text-[#425166] sm:text-xl sm:leading-7 lg:mb-10 lg:px-5 lg:text-[22px]">
+            Enter your credentials to access the dashboard.
+          </p>
 
           <form onSubmit={handleSubmit}>
             <label className="mx-auto mb-6 flex h-[63px] w-[498px] max-w-[90%] items-center gap-3 rounded-[31.5px] border border-[#9491b6] bg-white px-[18px] max-[1200px]:w-[480px] max-[980px]:mb-5 max-[980px]:w-full max-[980px]:max-w-[520px] max-[640px]:h-14 max-[640px]:px-4 max-[400px]:h-[52px] max-[400px]:gap-2.5 max-[400px]:px-3.5 [@media(max-height:600px)_and_(orientation:landscape)]:mb-4 [@media(max-height:600px)_and_(orientation:landscape)]:h-12">

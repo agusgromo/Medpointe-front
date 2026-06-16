@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 import MainLayout from '../components/MainLayout'
-import { getSchedule } from '../services/schedule'
+import { ui } from '../components/ui'
+import { getSchedule, getScheduleOptions } from '../services/schedule'
 import { getStoredSession } from '../services/session'
+
+const DASHBOARD_OFFICE_KEY = 'medpointe.dashboard.officeId'
 
 function inputDate(value = new Date()) {
   const date = new Date(value)
@@ -46,15 +49,52 @@ function StatusDot({ status }) {
 export default function Dashboard() {
   const session = getStoredSession()
   const now = new Date()
+  const [officeOptions, setOfficeOptions] = useState([])
+  const [selectedOfficeId, setSelectedOfficeId] = useState('')
   const [scheduleRows, setScheduleRows] = useState([])
+
+  useEffect(() => {
+    async function loadOfficeOptions() {
+      try {
+        const response = await getScheduleOptions()
+
+        if (response.status === 200 && response.data) {
+          const locations = Array.isArray(response.data.locations) ? response.data.locations : []
+          const storedOfficeId = localStorage.getItem(DASHBOARD_OFFICE_KEY) || ''
+          const preferredOfficeId = locations.find((location) => String(location.id) === storedOfficeId)?.id
+            ?? locations[0]?.id
+            ?? ''
+
+          setOfficeOptions(locations)
+          setSelectedOfficeId(preferredOfficeId ? String(preferredOfficeId) : '')
+        }
+      } catch {
+        setOfficeOptions([])
+        setSelectedOfficeId('')
+      }
+    }
+
+    loadOfficeOptions()
+  }, [])
+
+  useEffect(() => {
+    if (selectedOfficeId) {
+      localStorage.setItem(DASHBOARD_OFFICE_KEY, selectedOfficeId)
+    }
+  }, [selectedOfficeId])
 
   useEffect(() => {
     async function loadTodaySchedule() {
       try {
-        const response = await getSchedule({ date: inputDate() })
+        const response = await getSchedule({
+          date: inputDate(),
+          locationId: selectedOfficeId || undefined,
+        })
 
         if (response.status === 200 && Array.isArray(response.data)) {
           setScheduleRows(response.data)
+        } else {
+          setScheduleRows([])
         }
       } catch {
         setScheduleRows([])
@@ -62,19 +102,53 @@ export default function Dashboard() {
     }
 
     loadTodaySchedule()
-  }, [])
+  }, [selectedOfficeId])
+
+  const selectedOffice = officeOptions.find((office) => String(office.id) === String(selectedOfficeId))
 
   return (
     <MainLayout>
-      <div className="w-full flex-1 rounded-lg border-2 border-[var(--mp-line-strong)] p-4 max-[720px]:p-3">
+      <div className="w-full flex-1 rounded-lg border-2 border-mp-line-strong p-4 max-[720px]:p-3">
         <section id="DASHBOARD_ROOT" className="px-4 pb-3">
           <div className="mb-2 flex items-center justify-between gap-4 max-[720px]:flex-col max-[720px]:items-start">
             <div className="mr-auto flex items-baseline gap-2.5">
-              <h2 className="m-0 text-xl font-bold text-[var(--mp-strong)]">Dashboard</h2>
-              <div className="font-semibold text-[var(--mp-muted)]">Welcome, {session?.username || 'user'}</div>
+              <h2 className="m-0 text-xl font-bold text-mp-strong">Dashboard</h2>
+              <div className="font-semibold text-mp-muted">Welcome, {session?.username || 'user'}</div>
             </div>
 
-            <div className="flex min-w-[250px] items-center gap-2.5 rounded-lg border border-[#e6eef8] bg-white px-3.5 py-3 shadow-[0_2px_10px_rgba(16,24,40,0.04)] max-[720px]:w-full max-[720px]:min-w-0">
+            <div className="flex items-center gap-3 max-[720px]:w-full max-[720px]:flex-col max-[720px]:items-stretch">
+              <div className="flex min-w-[230px] items-center gap-2.5 rounded-lg border border-[#e6eef8] bg-white px-3 py-2.5 shadow-[0_2px_10px_rgba(16,24,40,0.04)] max-[720px]:w-full max-[720px]:min-w-0">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#eef5ff] text-[#2563eb]">
+                  <svg
+                    className="h-5 w-5 fill-none stroke-current"
+                    viewBox="0 0 24 24"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M4 7h16" />
+                    <path d="M7 3h10v18H7z" />
+                    <path d="M10 11h4" />
+                    <path d="M10 15h4" />
+                  </svg>
+                </div>
+                <label className="grid min-w-0 flex-1 gap-1">
+                  <span className="text-[11px] font-extrabold uppercase tracking-[0.02em] text-slate-500">Office</span>
+                  <select
+                    className="min-h-8 min-w-0 rounded-md border border-[#d9e2ea] bg-white px-2.5 py-1 text-sm font-semibold text-slate-900 outline-none"
+                    value={selectedOfficeId}
+                    onChange={(event) => setSelectedOfficeId(event.target.value)}
+                  >
+                    {officeOptions.map((office) => (
+                      <option key={office.id} value={office.id}>{office.name}</option>
+                    ))}
+                    {!officeOptions.length ? <option value="">No offices</option> : null}
+                  </select>
+                </label>
+              </div>
+
+              <div className="flex min-w-[250px] items-center gap-2.5 rounded-lg border border-[#e6eef8] bg-white px-3.5 py-3 shadow-[0_2px_10px_rgba(16,24,40,0.04)] max-[720px]:w-full max-[720px]:min-w-0">
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#eaf2ff] text-[#2563eb]">
                 <svg
                   className="h-5 w-5 fill-none stroke-current"
@@ -116,6 +190,7 @@ export default function Dashboard() {
                   })}
                 </div>
               </div>
+            </div>
             </div>
           </div>
 
@@ -164,10 +239,15 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div id="dash-sched" className="rounded-lg border border-[var(--mp-line)] bg-white p-3.5">
-            <div className="mt-2.5 mb-1.5 font-semibold text-[var(--mp-strong)]">Today's Schedule</div>
+          <div id="dash-sched" className="rounded-lg border border-mp-line bg-white p-3.5">
+            <div className="mt-2.5 mb-1.5 flex items-center justify-between gap-3">
+              <div className="font-semibold text-mp-strong">Today's Schedule</div>
+              <div className="text-xs font-semibold text-mp-muted">
+                {selectedOffice?.name || 'Office'}
+              </div>
+            </div>
 
-            <div className="overflow-hidden rounded-lg border border-[var(--mp-line)] bg-white max-[720px]:overflow-x-auto">
+            <div className="overflow-hidden rounded-lg border border-mp-line bg-white max-[720px]:overflow-x-auto">
               <div className="grid grid-cols-[80px_28px_40px_minmax(150px,1.2fr)_minmax(220px,2fr)_28px_28px] items-center gap-x-3 bg-gray-100 py-1.5 pr-[31px] pl-2 text-xs font-semibold text-slate-900 max-[720px]:min-w-[760px]">
                 <div className="min-w-0 py-1.5 text-center">Time</div>
                 <div className="flex min-w-0 justify-center py-1.5 text-center">Arrival</div>
@@ -205,7 +285,7 @@ export default function Dashboard() {
                 ))}
 
                 {scheduleRows.length === 0 ? (
-                  <div className="pa-empty">No appointments scheduled.</div>
+                  <div className={ui.empty}>No appointments scheduled.</div>
                 ) : null}
               </div>
             </div>

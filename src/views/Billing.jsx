@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import MainLayout from '../components/MainLayout'
+import { cn, statusPillClasses, ui } from '../components/ui'
 import { getBillingClaim, getBillingClaims } from '../services/billing'
 
 const claimStatuses = [
@@ -49,10 +50,6 @@ function formatCurrency(value) {
   })
 }
 
-function statusClass(value) {
-  return `pa-pill pa-pill--${String(value || '').toLowerCase().replaceAll('_', '-')}`
-}
-
 function BillingIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -76,10 +73,18 @@ function RefreshIcon() {
 }
 
 function BillingMetric({ label, value, tone = 'default' }) {
+  const toneClass = {
+    blue: 'border-l-[#4190f5]',
+    green: 'border-l-[#10b981]',
+    amber: 'border-l-[#f59e0b]',
+    slate: 'border-l-[#475569]',
+    default: 'border-l-[#94a3b8]',
+  }[tone] || 'border-l-[#94a3b8]'
+
   return (
-    <div className={`billing-metric billing-metric--${tone}`}>
-      <div className="billing-metric-value">{value}</div>
-      <div className="billing-metric-label">{label}</div>
+    <div className={cn('min-w-0 rounded-lg border border-mp-line border-l-[5px] bg-white p-3.5', toneClass)}>
+      <div className="text-[28px] leading-none font-extrabold text-mp-strong">{value}</div>
+      <div className="mt-1.5 text-xs font-extrabold uppercase text-[#64748b]">{label}</div>
     </div>
   )
 }
@@ -230,23 +235,23 @@ export default function Billing() {
 
   return (
     <MainLayout>
-      <section className="billing-screen">
-        <div className="billing-topbar">
-          <div className="billing-title-block">
-            <div className="billing-title-icon">
+      <section className="grid w-full gap-4">
+        <div className="grid gap-4 rounded-lg border border-mp-line bg-white p-3.5 lg:flex lg:items-end lg:justify-between">
+          <div className="flex min-w-[220px] items-center gap-3">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-[#ecfdf5] text-[#047857] [&_svg]:h-5 [&_svg]:w-5 [&_svg]:fill-none [&_svg]:stroke-current [&_svg]:stroke-[1.8] [&_svg]:stroke-linecap-round [&_svg]:stroke-linejoin-round">
               <BillingIcon />
             </div>
             <div>
-              <h1>Billing</h1>
-              <div className="billing-subtitle">{claims.length} claims in view</div>
+              <h1 className="m-0 text-2xl leading-tight font-extrabold text-mp-strong">Billing</h1>
+              <div className="text-xs text-[#64748b]">{claims.length} claims in view</div>
             </div>
           </div>
 
-          <div className="billing-controls">
-            <label>
+          <div className="grid w-full items-end gap-2.5 md:grid-cols-2 lg:max-w-[1120px] lg:grid-cols-[minmax(160px,1.15fr)_minmax(130px,0.8fr)_minmax(150px,0.9fr)_minmax(140px,0.8fr)_minmax(140px,0.8fr)_auto]">
+            <label className={ui.label}>
               Search
               <input
-                className="w-input"
+                className={ui.input}
                 name="search"
                 value={filters.search}
                 onChange={handleFilterChange}
@@ -254,28 +259,28 @@ export default function Billing() {
               />
             </label>
 
-            <label>
+            <label className={ui.label}>
               Status
-              <select className="w-input" name="status" value={filters.status} onChange={handleFilterChange}>
+              <select className={ui.input} name="status" value={filters.status} onChange={handleFilterChange}>
                 {claimStatuses.map((status) => (
                   <option key={status || 'all'} value={status}>{humanize(status)}</option>
                 ))}
               </select>
             </label>
 
-            <label>
+            <label className={ui.label}>
               Stage
-              <select className="w-input" name="billingStage" value={filters.billingStage} onChange={handleFilterChange}>
+              <select className={ui.input} name="billingStage" value={filters.billingStage} onChange={handleFilterChange}>
                 {billingStages.map((stage) => (
                   <option key={stage || 'all'} value={stage}>{humanize(stage)}</option>
                 ))}
               </select>
             </label>
 
-            <label>
+            <label className={ui.label}>
               From
               <input
-                className="w-input"
+                className={ui.input}
                 name="serviceDateFrom"
                 type="date"
                 value={filters.serviceDateFrom}
@@ -283,10 +288,10 @@ export default function Billing() {
               />
             </label>
 
-            <label>
+            <label className={ui.label}>
               To
               <input
-                className="w-input"
+                className={ui.input}
                 name="serviceDateTo"
                 type="date"
                 value={filters.serviceDateTo}
@@ -294,138 +299,135 @@ export default function Billing() {
               />
             </label>
 
-            <button className="btn-outline billing-refresh" type="button" onClick={loadClaims} disabled={loading}>
+            <button className={cn(ui.secondaryButton, 'whitespace-nowrap max-md:w-full')} type="button" onClick={loadClaims} disabled={loading}>
               <RefreshIcon />
               Refresh
             </button>
           </div>
         </div>
 
-        {message ? <div className="pa-alert">{message}</div> : null}
+        {message ? <div className={ui.warning}>{message}</div> : null}
 
-        <div className="billing-metrics">
+        <div className="grid gap-3 max-[520px]:grid-cols-1 md:grid-cols-2 xl:grid-cols-4">
           <BillingMetric label="Open Claims" value={metrics.openClaims} tone="blue" />
           <BillingMetric label="Submitted" value={metrics.submitted} tone="green" />
           <BillingMetric label="Insurance AR" value={formatCurrency(metrics.insuranceBalance)} tone="amber" />
           <BillingMetric label="Patient AR" value={formatCurrency(metrics.patientBalance)} tone="slate" />
         </div>
 
-        <div className="billing-layout">
-          <div className="billing-panel billing-worklist">
-            <div className="billing-panel-head">
+        <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(340px,430px)]">
+          <div className={ui.panel}>
+            <div className="mb-3 flex items-center justify-between gap-3">
               <div>
-                <div className="billing-panel-title">Claim Worklist</div>
-                <div className="billing-panel-subtitle">{loading ? 'Loading' : `${claims.length} rows`}</div>
+                <div className={ui.sectionTitle}>Claim Worklist</div>
+                <div className={ui.sectionSubtitle}>{loading ? 'Loading' : `${claims.length} rows`}</div>
               </div>
             </div>
 
-            <div className="billing-table-wrap">
-              <table className="billing-table">
+            <div className="overflow-auto rounded-lg border border-[#edf2f7]">
+              <table className="min-w-[980px] w-full border-collapse">
                 <thead>
                   <tr>
-                    <th>Claim</th>
-                    <th>Patient</th>
-                    <th>Date</th>
-                    <th>Status</th>
-                    <th>Stage</th>
-                    <th>Charge</th>
-                    <th>Balance</th>
+                    {['Claim', 'Patient', 'Date', 'Status', 'Stage', 'Charge', 'Balance'].map((heading) => (
+                      <th
+                        key={heading}
+                        className="sticky top-0 z-[1] bg-slate-50 px-3 py-2.5 text-left text-xs font-extrabold uppercase text-slate-600"
+                      >
+                        {heading}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
                   {claims.map((claim) => (
                     <tr
-                      className={claim.id === activeClaimId ? 'is-selected' : ''}
+                      className={cn(
+                        'cursor-pointer border-b border-[#eef2f7] hover:bg-[#f2f7ff]',
+                        claim.id === activeClaimId ? 'bg-[#f2f7ff]' : '',
+                      )}
                       key={claim.id}
                       onClick={() => setActiveClaimId(claim.id)}
                     >
-                      <td>
-                        <div className="billing-claim-number">{claim.claimNumber}</div>
-                        <div className="billing-cell-sub">{claim.primaryInsuranceName || 'Self pay'}</div>
+                      <td className="px-3 py-2.5 align-middle">
+                        <div className="font-extrabold text-mp-strong">{claim.claimNumber}</div>
+                        <div className="text-xs text-[#64748b]">{claim.primaryInsuranceName || 'Self pay'}</div>
                       </td>
-                      <td>
-                        <div className="billing-patient">{claim.patientName || 'Unassigned'}</div>
-                        <div className="billing-cell-sub">#{claim.patientId}</div>
+                      <td className="px-3 py-2.5 align-middle">
+                        <div className="font-extrabold text-mp-strong">{claim.patientName || 'Unassigned'}</div>
+                        <div className="text-xs text-[#64748b]">#{claim.patientId}</div>
                       </td>
-                      <td>{formatDate(claim.serviceDate)}</td>
-                      <td><span className={statusClass(claim.status)}>{humanize(claim.status)}</span></td>
-                      <td>{humanize(claim.billingStage)}</td>
-                      <td>{formatCurrency(claim.totalCharge)}</td>
-                      <td>{formatCurrency(Number(claim.insuranceBalance || 0) + Number(claim.patientBalance || 0))}</td>
+                      <td className="px-3 py-2.5 align-middle">{formatDate(claim.serviceDate)}</td>
+                      <td className="px-3 py-2.5 align-middle"><span className={statusPillClasses(claim.status)}>{humanize(claim.status)}</span></td>
+                      <td className="px-3 py-2.5 align-middle">{humanize(claim.billingStage)}</td>
+                      <td className="px-3 py-2.5 align-middle">{formatCurrency(claim.totalCharge)}</td>
+                      <td className="px-3 py-2.5 align-middle">{formatCurrency(Number(claim.insuranceBalance || 0) + Number(claim.patientBalance || 0))}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
 
               {!loading && claims.length === 0 ? (
-                <div className="pa-empty">No claims found.</div>
+                <div className={ui.empty}>No claims found.</div>
               ) : null}
             </div>
           </div>
 
-          <aside className="billing-side">
-            <div className="billing-panel billing-detail">
-              <div className="billing-panel-head">
+          <aside className="min-w-0">
+            <div className={ui.panel}>
+              <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
-                  <div className="billing-panel-title">Claim Detail</div>
-                  <div className="billing-panel-subtitle">{activeClaim ? activeClaim.claimNumber : '-'}</div>
+                  <div className={ui.sectionTitle}>Claim Detail</div>
+                  <div className={ui.sectionSubtitle}>{activeClaim ? activeClaim.claimNumber : '-'}</div>
                 </div>
               </div>
 
               {activeClaim ? (
                 <>
-                  <div className="billing-detail-list">
-                    <div>
-                      <span>Patient</span>
-                      <b>{activeClaim.patientName}</b>
-                    </div>
-                    <div>
-                      <span>Service</span>
-                      <b>{formatDate(activeClaim.serviceDate)}</b>
-                    </div>
-                    <div>
-                      <span>Insurance</span>
-                      <b>{activeClaim.primaryInsuranceName || 'Self pay'}</b>
-                    </div>
-                    <div>
-                      <span>Status</span>
-                      <b>{humanize(activeClaim.status)} / {humanize(activeClaim.billingStage)}</b>
-                    </div>
-                    <div>
-                      <span>Provider</span>
-                      <b>{activeClaim.providerName || '-'}</b>
-                    </div>
-                    <div>
-                      <span>Location</span>
-                      <b>{activeClaim.locationName || '-'}</b>
-                    </div>
+                  <div className="grid gap-2.5">
+                    {[
+                      ['Patient', activeClaim.patientName],
+                      ['Service', formatDate(activeClaim.serviceDate)],
+                      ['Insurance', activeClaim.primaryInsuranceName || 'Self pay'],
+                      ['Status', `${humanize(activeClaim.status)} / ${humanize(activeClaim.billingStage)}`],
+                      ['Provider', activeClaim.providerName || '-'],
+                      ['Location', activeClaim.locationName || '-'],
+                    ].map(([label, value], index) => (
+                      <div
+                        key={label}
+                        className={cn(
+                          'grid gap-2 pt-2.5 [grid-template-columns:minmax(92px,0.7fr)_minmax(0,1fr)]',
+                          index === 0 ? 'border-t-0 pt-0' : 'border-t border-[#eef2f7]',
+                        )}
+                      >
+                        <span className="text-xs font-extrabold uppercase text-[#64748b]">{label}</span>
+                        <b className="min-w-0 [overflow-wrap:anywhere] font-bold text-mp-strong">{value}</b>
+                      </div>
+                    ))}
                   </div>
 
-                  <div className="billing-totals">
-                    <div>
-                      <span>Charge</span>
-                      <b>{formatCurrency(activeClaim.totalCharge)}</b>
-                    </div>
-                    <div>
-                      <span>Paid</span>
-                      <b>{formatCurrency(activeClaim.totalPaid)}</b>
-                    </div>
-                    <div>
-                      <span>Adjustment</span>
-                      <b>{formatCurrency(activeClaim.totalAdjustment)}</b>
-                    </div>
-                    <div>
-                      <span>Balance</span>
-                      <b>{formatCurrency(Number(activeClaim.insuranceBalance || 0) + Number(activeClaim.patientBalance || 0))}</b>
-                    </div>
+                  <div className="mt-3 grid gap-2.5 max-[520px]:grid-cols-1 md:grid-cols-2">
+                    {[
+                      ['Charge', formatCurrency(activeClaim.totalCharge)],
+                      ['Paid', formatCurrency(activeClaim.totalPaid)],
+                      ['Adjustment', formatCurrency(activeClaim.totalAdjustment)],
+                      ['Balance', formatCurrency(Number(activeClaim.insuranceBalance || 0) + Number(activeClaim.patientBalance || 0))],
+                    ].map(([label, value]) => (
+                      <div key={label} className="grid gap-1 rounded-lg border border-[#edf2f7] bg-slate-50 p-2.5">
+                        <span className="text-xs font-extrabold uppercase text-[#64748b]">{label}</span>
+                        <b className="text-base font-bold text-mp-strong">{value}</b>
+                      </div>
+                    ))}
                   </div>
 
                   {activeClaim.diagnoses?.length ? (
-                    <div className="billing-section">
-                      <div className="billing-section-title">Diagnoses</div>
-                      <div className="billing-diagnoses">
+                    <div className="mt-3 grid gap-2 border-t border-[#eef2f7] pt-3">
+                      <div className="text-xs font-extrabold uppercase text-[#64748b]">Diagnoses</div>
+                      <div className="flex flex-wrap gap-1.5">
                         {activeClaim.diagnoses.map((diagnosis) => (
-                          <span key={diagnosis.id || `${diagnosis.sequence}-${diagnosis.diagnosisCode}`}>
+                          <span
+                            key={diagnosis.id || `${diagnosis.sequence}-${diagnosis.diagnosisCode}`}
+                            className="rounded-full bg-[#eef2f7] px-2 py-1 text-xs font-extrabold text-slate-600"
+                          >
                             {diagnosis.sequence}. {diagnosis.diagnosisCode}
                           </span>
                         ))}
@@ -433,25 +435,25 @@ export default function Billing() {
                     </div>
                   ) : null}
 
-                  <div className="billing-section">
-                    <div className="billing-section-title">Lines</div>
-                    <div className="billing-line-list">
+                  <div className="mt-3 grid gap-2 border-t border-[#eef2f7] pt-3">
+                    <div className="text-xs font-extrabold uppercase text-[#64748b]">Lines</div>
+                    <div className="grid gap-2">
                       {activeClaim.lines?.length ? activeClaim.lines.map((line) => (
-                        <div className="billing-line" key={line.id}>
-                          <div>
-                            <b>{line.procedureCode}</b>
-                            <span>{line.description}</span>
+                        <div className="grid items-start gap-2 rounded-lg border border-[#edf2f7] p-2.5 [grid-template-columns:minmax(0,1fr)_auto]" key={line.id}>
+                          <div className="grid min-w-0 gap-0.5">
+                            <b className="text-[13px] font-bold text-mp-strong">{line.procedureCode}</b>
+                            <span className="min-w-0 text-xs text-[#64748b] [overflow-wrap:anywhere]">{line.description}</span>
                           </div>
                           <div>{formatCurrency(line.chargeAmount)}</div>
                         </div>
                       )) : (
-                        <div className="pa-empty">No claim lines.</div>
+                        <div className={ui.empty}>No claim lines.</div>
                       )}
                     </div>
                   </div>
                 </>
               ) : (
-                <div className="pa-empty">No claim selected.</div>
+                <div className={ui.empty}>No claim selected.</div>
               )}
             </div>
           </aside>

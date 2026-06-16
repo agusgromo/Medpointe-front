@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import MainLayout from '../components/MainLayout'
+import { cn, statusPillClasses, ui } from '../components/ui'
 import avatar from '../assets/patient-avatar.png'
 import { createPatient, getLanguages, getPatientActivity, searchPatients } from '../services/patients'
 
@@ -77,10 +78,13 @@ const emptyPatientForm = {
   communicationPreference: '',
 }
 
+const PATIENT_ACTIVITY_RECENTS_KEY = 'medpointe.patientActivity.recentPatients'
+const PATIENT_ACTIVITY_RECENTS_LIMIT = 12
+
 function DotsButton({ label = 'More options' }) {
   return (
-    <button className="btn-icon" type="button" aria-label={label} title="More">
-      <svg viewBox="0 0 16 4" aria-hidden="true">
+    <button className={ui.iconButton} type="button" aria-label={label} title="More">
+      <svg viewBox="0 0 16 4" aria-hidden="true" className="h-4 w-4 fill-current">
         <circle cx="2" cy="2" r="2" />
         <circle cx="8" cy="2" r="2" />
         <circle cx="14" cy="2" r="2" />
@@ -91,10 +95,10 @@ function DotsButton({ label = 'More options' }) {
 
 function Card({ className = '', title, children }) {
   return (
-    <div className={`pa-card ${className}`}>
+    <div className={cn(ui.panel, className)}>
       {title ? (
-        <div className="card-head">
-          <div className="card-title">{title}</div>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="font-extrabold text-mp-strong">{title}</div>
           <DotsButton label={`${title} menu`} />
         </div>
       ) : null}
@@ -105,11 +109,13 @@ function Card({ className = '', title, children }) {
 
 function KvList({ rows }) {
   return (
-    <div className="kv">
+    <div className="grid gap-2">
       {rows.map(([label, value, linky]) => (
-        <div className="kv-row" key={label}>
-          <div className="kv-k">{label}</div>
-          <div className={`kv-v${linky ? ' linky' : ''}`}>{value === 0 ? 0 : value || '-'}</div>
+        <div className="grid items-start gap-2.5 [grid-template-columns:minmax(96px,0.9fr)_minmax(0,1.1fr)] max-[720px]:grid-cols-1" key={label}>
+          <div className="text-xs font-bold uppercase text-[#7a8798]">{label}</div>
+          <div className={cn('min-w-0 text-right font-semibold text-mp-strong [overflow-wrap:anywhere] max-[720px]:text-left', linky ? 'text-[#2563eb]' : '')}>
+            {value === 0 ? 0 : value || '-'}
+          </div>
         </div>
       ))}
     </div>
@@ -117,7 +123,7 @@ function KvList({ rows }) {
 }
 
 function EmptyState({ message = 'No data' }) {
-  return <div className="pa-empty">{message}</div>
+  return <div className={ui.empty}>{message}</div>
 }
 
 function InsurancePlanTabs({ policies, selectedId, onSelect }) {
@@ -153,7 +159,7 @@ function StatusPill({ value }) {
     return null
   }
 
-  return <span className={`pa-pill pa-pill--${String(value).toLowerCase().replaceAll('_', '-')}`}>{humanize(value)}</span>
+  return <span className={statusPillClasses(value)}>{humanize(value)}</span>
 }
 
 function fullName(person) {
@@ -167,8 +173,8 @@ function fullName(person) {
 }
 
 function searchResultName(patient) {
-  const lastName = patient.lastName + ","
-  return [lastName, patient.middleName, patient.firstName].filter(Boolean).join(' ')
+  const leading = patient?.lastName ? `${patient.lastName},` : ''
+  return [leading, patient?.firstName, patient?.middleName].filter(Boolean).join(' ')
 }
 
 function humanize(value) {
@@ -177,6 +183,126 @@ function humanize(value) {
   }
 
   return String(value).replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
+}
+
+function searchResultMeta(patient) {
+  return [
+    formatDate(patient?.dateOfBirth),
+    humanize(patient?.sexAtBirth),
+    patient?.primaryLocationName,
+    patient?.primaryProviderName,
+    patient?.id ? `#${patient.id}` : '',
+  ].filter(Boolean).join(' | ')
+}
+
+function buildPatientSearchQuery(fields) {
+  const account = fields.account.trim()
+
+  if (account) {
+    return account
+  }
+
+  return [fields.lastName.trim(), fields.firstName.trim()].filter(Boolean).join(' ').trim()
+}
+
+function readRecentPatients() {
+  if (typeof window === 'undefined') {
+    return []
+  }
+
+  try {
+    const stored = window.localStorage.getItem(PATIENT_ACTIVITY_RECENTS_KEY)
+    const parsed = stored ? JSON.parse(stored) : []
+
+    if (!Array.isArray(parsed)) {
+      return []
+    }
+
+    return parsed.filter((patient) => patient?.id)
+  } catch {
+    return []
+  }
+}
+
+function writeRecentPatients(patients) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  window.localStorage.setItem(PATIENT_ACTIVITY_RECENTS_KEY, JSON.stringify(patients))
+}
+
+function toRecentPatient(activityData) {
+  const patient = activityData?.patient
+
+  if (!patient?.id) {
+    return null
+  }
+
+  return {
+    id: String(patient.id),
+    firstName: patient.firstName || '',
+    middleName: patient.middleName || '',
+    lastName: patient.lastName || '',
+    dateOfBirth: patient.dateOfBirth || '',
+    sexAtBirth: patient.sexAtBirth || '',
+    primaryProviderName: patient.primaryProviderName || '',
+    primaryLocationName: patient.primaryLocationName || '',
+    lastOpenedAt: new Date().toISOString(),
+  }
+}
+
+function rememberRecentPatient(currentPatients, activityData) {
+  const nextPatient = toRecentPatient(activityData)
+
+  if (!nextPatient) {
+    return currentPatients
+  }
+
+  return [
+    nextPatient,
+    ...currentPatients.filter((patient) => String(patient.id) !== String(nextPatient.id)),
+  ].slice(0, PATIENT_ACTIVITY_RECENTS_LIMIT)
+}
+
+function recentPatientMatches(patient, query) {
+  const term = query.trim().toLowerCase()
+
+  if (!term) {
+    return true
+  }
+
+  return [
+    patient.id,
+    patient.lastName,
+    patient.firstName,
+    patient.middleName,
+    patient.primaryLocationName,
+    patient.primaryProviderName,
+  ]
+    .filter(Boolean)
+    .some((value) => String(value).toLowerCase().includes(term))
+}
+
+function getAlertNotes(activity) {
+  return (activity?.notes || []).filter((note) => {
+    const noteType = String(note.noteType || '').toLowerCase()
+    return ['alert', 'warning', 'reminder'].some((token) => noteType.includes(token))
+  })
+}
+
+function getAlertSummaryRows(activity) {
+  const patient = activity?.patient
+
+  return [
+    ['Status', humanize(patient?.status)],
+    ['Billing Status', humanize(patient?.billingStatus)],
+    ['Classification', patient?.classification],
+    ['Category', patient?.category],
+    ['Stage', patient?.stage],
+    ['Office', patient?.primaryLocationName],
+    ['Provider', patient?.primaryProviderName],
+  ].filter(([, value]) => value)
 }
 
 function formatDate(value) {
@@ -304,16 +430,18 @@ function OverviewRows({ tab, activity, insurancePolicies, insurancePolicy, onIns
     }
 
     return (
-      <div className="ov-rows">
+      <div className="grid gap-2">
         <InsurancePlanTabs
           policies={insurancePolicies}
           selectedId={selectedInsurance?.id}
           onSelect={onInsuranceSelect}
         />
         {rows.map(([label, value]) => (
-          <div className="ov-row" key={label}>
-            <div className="ov-k">{label}</div>
-            <div className="ov-v">{value === 0 ? 0 : value || '-'}</div>
+          <div className="grid items-start gap-2.5 [grid-template-columns:minmax(96px,0.9fr)_minmax(0,1.1fr)] max-[720px]:grid-cols-1" key={label}>
+            <div className="text-xs font-bold uppercase text-[#7a8798]">{label}</div>
+            <div className="min-w-0 text-right font-semibold text-mp-strong [overflow-wrap:anywhere] max-[720px]:text-left">
+              {value === 0 ? 0 : value || '-'}
+            </div>
           </div>
         ))}
       </div>
@@ -321,11 +449,13 @@ function OverviewRows({ tab, activity, insurancePolicies, insurancePolicy, onIns
   }
 
   return (
-    <div className="ov-rows">
+    <div className="grid gap-2">
       {rows.map(([label, value]) => (
-        <div className="ov-row" key={label}>
-          <div className="ov-k">{label}</div>
-          <div className="ov-v">{value === 0 ? 0 : value || '-'}</div>
+        <div className="grid items-start gap-2.5 [grid-template-columns:minmax(96px,0.9fr)_minmax(0,1.1fr)] max-[720px]:grid-cols-1" key={label}>
+          <div className="text-xs font-bold uppercase text-[#7a8798]">{label}</div>
+          <div className="min-w-0 text-right font-semibold text-mp-strong [overflow-wrap:anywhere] max-[720px]:text-left">
+            {value === 0 ? 0 : value || '-'}
+          </div>
         </div>
       ))}
     </div>
@@ -338,16 +468,16 @@ function Timeline({ items }) {
   }
 
   return (
-    <div className="pa-timeline">
+    <div className="grid gap-3">
       {items.slice(0, 12).map((item, index) => (
-        <div className="pa-timeline-row" key={`${item.type}-${item.occurredAt}-${index}`}>
-          <div className="pa-time">{formatDate(item.occurredAt)}</div>
-          <div className="pa-timeline-main">
-            <div className="pa-timeline-title">
-              <span>{item.title}</span>
+        <div className="grid gap-3 border-t border-[#eef2f7] py-2.5 [grid-template-columns:92px_minmax(0,1fr)] first:border-t-0 first:pt-0 max-[720px]:grid-cols-1" key={`${item.type}-${item.occurredAt}-${index}`}>
+          <div className="text-xs font-bold text-[#64748b]">{formatDate(item.occurredAt)}</div>
+          <div className="min-w-0">
+            <div className="flex items-center justify-between gap-3">
+              <span className="min-w-0 font-bold text-mp-strong [overflow-wrap:anywhere]">{item.title}</span>
               <StatusPill value={item.status || item.type} />
             </div>
-            {item.detail ? <div className="pa-timeline-detail">{item.detail}</div> : null}
+            {item.detail ? <div className="text-xs text-[#64748b]">{item.detail}</div> : null}
           </div>
         </div>
       ))}
@@ -360,7 +490,7 @@ function CompactList({ items, renderItem, empty }) {
     return <EmptyState message={empty} />
   }
 
-  return <div className="pa-compact-list">{items.slice(0, 6).map(renderItem)}</div>
+  return <div className="grid gap-2.5">{items.slice(0, 6).map(renderItem)}</div>
 }
 
 function AddPatientModal({ languages, onClose, onCreated }) {
@@ -399,62 +529,67 @@ function AddPatientModal({ languages, onClose, onCreated }) {
   }
 
   return (
-    <div className="pa-modal-backdrop" role="presentation">
-      <section className="pa-modal" role="dialog" aria-modal="true" aria-labelledby="add-patient-title">
+    <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-900/30 p-5 max-[520px]:items-stretch max-[520px]:p-2.5" role="presentation">
+      <section
+        className="max-h-[calc(100vh-40px)] w-full max-w-[920px] overflow-auto rounded-lg border border-[#d9e2ea] bg-white shadow-[0_24px_70px_rgba(15,23,42,0.24)] max-[520px]:max-h-[calc(100vh-20px)]"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-patient-title"
+      >
         <form onSubmit={handleSubmit}>
-          <div className="pa-modal-head">
+          <div className="flex items-center justify-between gap-4 border-b border-[#edf2f7] px-[18px] py-4 max-[520px]:px-3.5">
             <div>
-              <h2 id="add-patient-title">Add Patient</h2>
-              <p>New patient demographics</p>
+              <h2 id="add-patient-title" className="m-0 text-[22px] font-extrabold text-mp-strong">Add Patient</h2>
+              <p className="mt-[3px] mb-0 text-sm text-mp-muted">New patient demographics</p>
             </div>
-            <button className="btn-icon" type="button" aria-label="Close" onClick={onClose}>
-              <svg viewBox="0 0 24 24" aria-hidden="true">
+            <button className={ui.iconButton} type="button" aria-label="Close" onClick={onClose}>
+              <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4">
                 <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="2" />
               </svg>
             </button>
           </div>
 
-          {error ? <div className="pa-message">{error}</div> : null}
+          {error ? <div className={cn(ui.message, 'mx-[18px] max-[520px]:mx-3.5')}>{error}</div> : null}
 
-          <div className="pa-modal-body">
+          <div className="grid gap-4 px-[18px] py-4 max-[520px]:px-3.5">
             <fieldset>
-              <legend>Identity</legend>
-              <div className="pa-form-grid">
-                <label>
+              <legend className="pb-3 font-extrabold text-mp-strong">Identity</legend>
+              <div className="grid gap-3 md:grid-cols-4 max-[860px]:grid-cols-2 max-[520px]:grid-cols-1">
+                <label className={ui.label}>
                   <span>First Name</span>
-                  <input className="w-input" name="firstName" value={form.firstName} onChange={updateField} required />
+                  <input className={ui.input} name="firstName" value={form.firstName} onChange={updateField} required />
                 </label>
-                <label>
+                <label className={ui.label}>
                   <span>Middle</span>
-                  <input className="w-input" name="middleName" value={form.middleName} onChange={updateField} maxLength="1" />
+                  <input className={ui.input} name="middleName" value={form.middleName} onChange={updateField} maxLength="1" />
                 </label>
-                <label>
+                <label className={ui.label}>
                   <span>Last Name</span>
-                  <input className="w-input" name="lastName" value={form.lastName} onChange={updateField} required />
+                  <input className={ui.input} name="lastName" value={form.lastName} onChange={updateField} required />
                 </label>
-                <label>
+                <label className={ui.label}>
                   <span>Suffix</span>
-                  <input className="w-input" name="suffix" value={form.suffix} onChange={updateField} />
+                  <input className={ui.input} name="suffix" value={form.suffix} onChange={updateField} />
                 </label>
-                <label>
+                <label className={ui.label}>
                   <span>Date of Birth</span>
-                  <input className="w-input" name="dateOfBirth" type="date" value={form.dateOfBirth} onChange={updateField} required />
+                  <input className={ui.input} name="dateOfBirth" type="date" value={form.dateOfBirth} onChange={updateField} required />
                 </label>
-                <label>
+                <label className={ui.label}>
                   <span>Sex</span>
-                  <select className="w-input" name="sexAtBirth" value={form.sexAtBirth} onChange={updateField} required>
+                  <select className={ui.input} name="sexAtBirth" value={form.sexAtBirth} onChange={updateField} required>
                     {sexOptions.map((option) => (
                       <option value={option.value} key={option.value}>{option.label}</option>
                     ))}
                   </select>
                 </label>
-                <label>
+                <label className={ui.label}>
                   <span>Nickname</span>
-                  <input className="w-input" name="nickname" value={form.nickname} onChange={updateField} />
+                  <input className={ui.input} name="nickname" value={form.nickname} onChange={updateField} />
                 </label>
-                <label>
+                <label className={ui.label}>
                   <span>Preferred Language</span>
-                  <select className="w-input" name="preferredLanguageId" value={selectedLanguageId} onChange={updateField} required>
+                  <select className={ui.input} name="preferredLanguageId" value={selectedLanguageId} onChange={updateField} required>
                     <option value="">Select</option>
                     {languages.map((language) => (
                       <option value={language.id} key={language.id}>{language.name}</option>
@@ -465,47 +600,47 @@ function AddPatientModal({ languages, onClose, onCreated }) {
             </fieldset>
 
             <fieldset>
-              <legend>Contact</legend>
-              <div className="pa-form-grid">
-                <label className="span-2">
+              <legend className="pb-3 font-extrabold text-mp-strong">Contact</legend>
+              <div className="grid gap-3 md:grid-cols-4 max-[860px]:grid-cols-2 max-[520px]:grid-cols-1">
+                <label className={cn(ui.label, 'md:col-span-2 max-[520px]:col-span-1')}>
                   <span>Address</span>
-                  <input className="w-input" name="addressLine1" value={form.addressLine1} onChange={updateField} />
+                  <input className={ui.input} name="addressLine1" value={form.addressLine1} onChange={updateField} />
                 </label>
-                <label>
+                <label className={ui.label}>
                   <span>Address 2</span>
-                  <input className="w-input" name="addressLine2" value={form.addressLine2} onChange={updateField} />
+                  <input className={ui.input} name="addressLine2" value={form.addressLine2} onChange={updateField} />
                 </label>
-                <label>
+                <label className={ui.label}>
                   <span>City</span>
-                  <input className="w-input" name="city" value={form.city} onChange={updateField} />
+                  <input className={ui.input} name="city" value={form.city} onChange={updateField} />
                 </label>
-                <label>
+                <label className={ui.label}>
                   <span>State</span>
-                  <input className="w-input" name="state" value={form.state} onChange={updateField} maxLength="2" />
+                  <input className={ui.input} name="state" value={form.state} onChange={updateField} maxLength="2" />
                 </label>
-                <label>
+                <label className={ui.label}>
                   <span>Zip</span>
-                  <input className="w-input" name="postalCode" value={form.postalCode} onChange={updateField} />
+                  <input className={ui.input} name="postalCode" value={form.postalCode} onChange={updateField} />
                 </label>
-                <label>
+                <label className={ui.label}>
                   <span>Mobile</span>
-                  <input className="w-input" name="mobilePhone" value={form.mobilePhone} onChange={updateField} />
+                  <input className={ui.input} name="mobilePhone" value={form.mobilePhone} onChange={updateField} />
                 </label>
-                <label>
+                <label className={ui.label}>
                   <span>Home</span>
-                  <input className="w-input" name="homePhone" value={form.homePhone} onChange={updateField} />
+                  <input className={ui.input} name="homePhone" value={form.homePhone} onChange={updateField} />
                 </label>
-                <label>
+                <label className={ui.label}>
                   <span>Work</span>
-                  <input className="w-input" name="workPhone" value={form.workPhone} onChange={updateField} />
+                  <input className={ui.input} name="workPhone" value={form.workPhone} onChange={updateField} />
                 </label>
-                <label>
+                <label className={ui.label}>
                   <span>Email</span>
-                  <input className="w-input" name="email" type="email" value={form.email} onChange={updateField} />
+                  <input className={ui.input} name="email" type="email" value={form.email} onChange={updateField} />
                 </label>
-                <label>
+                <label className={ui.label}>
                   <span>Preference</span>
-                  <select className="w-input" name="communicationPreference" value={form.communicationPreference} onChange={updateField}>
+                  <select className={ui.input} name="communicationPreference" value={form.communicationPreference} onChange={updateField}>
                     {communicationOptions.map((option) => (
                       <option value={option.value} key={option.value}>{option.label}</option>
                     ))}
@@ -515,47 +650,354 @@ function AddPatientModal({ languages, onClose, onCreated }) {
             </fieldset>
 
             <fieldset>
-              <legend>Other</legend>
-              <div className="pa-form-grid">
-                <label>
+              <legend className="pb-3 font-extrabold text-mp-strong">Other</legend>
+              <div className="grid gap-3 md:grid-cols-4 max-[860px]:grid-cols-2 max-[520px]:grid-cols-1">
+                <label className={ui.label}>
                   <span>Marital Status</span>
-                  <select className="w-input" name="maritalStatus" value={form.maritalStatus} onChange={updateField}>
+                  <select className={ui.input} name="maritalStatus" value={form.maritalStatus} onChange={updateField}>
                     {maritalStatusOptions.map((option) => (
                       <option value={option.value} key={option.value}>{option.label}</option>
                     ))}
                   </select>
                 </label>
-                <label>
+                <label className={ui.label}>
                   <span>Employment</span>
-                  <select className="w-input" name="employmentStatus" value={form.employmentStatus} onChange={updateField}>
+                  <select className={ui.input} name="employmentStatus" value={form.employmentStatus} onChange={updateField}>
                     {employmentStatusOptions.map((option) => (
                       <option value={option.value} key={option.value}>{option.label}</option>
                     ))}
                   </select>
                 </label>
-                <label>
+                <label className={ui.label}>
                   <span>Ethnicity</span>
-                  <input className="w-input" name="ethnicity" value={form.ethnicity} onChange={updateField} />
+                  <input className={ui.input} name="ethnicity" value={form.ethnicity} onChange={updateField} />
                 </label>
-                <label>
+                <label className={ui.label}>
                   <span>Gender Identity</span>
-                  <input className="w-input" name="genderIdentity" value={form.genderIdentity} onChange={updateField} />
+                  <input className={ui.input} name="genderIdentity" value={form.genderIdentity} onChange={updateField} />
                 </label>
-                <label>
+                <label className={ui.label}>
                   <span>Pronouns</span>
-                  <input className="w-input" name="pronouns" value={form.pronouns} onChange={updateField} />
+                  <input className={ui.input} name="pronouns" value={form.pronouns} onChange={updateField} />
                 </label>
               </div>
             </fieldset>
           </div>
 
-          <div className="pa-modal-actions">
-            <button className="btn-outline" type="button" onClick={onClose}>Cancel</button>
-            <button className="w-button pa-submit" type="submit" disabled={submitting}>
+          <div className="flex items-center justify-between gap-4 border-t border-[#edf2f7] bg-[#fbfdff] px-[18px] py-4 max-[520px]:px-3.5">
+            <button className={ui.secondaryButton} type="button" onClick={onClose}>Cancel</button>
+            <button className={cn(ui.primaryButton, 'min-w-[150px]')} type="submit" disabled={submitting}>
               {submitting ? 'Saving' : 'Save Patient'}
             </button>
           </div>
         </form>
+      </section>
+    </div>
+  )
+}
+
+function PatientSearchModal({ initialQuery = '', onClose, onSelect }) {
+  const [fields, setFields] = useState(() => ({
+    account: /^\d+$/.test(initialQuery.trim()) ? initialQuery.trim() : '',
+    lastName: /^\d+$/.test(initialQuery.trim()) ? '' : initialQuery.trim(),
+    firstName: '',
+  }))
+  const [results, setResults] = useState([])
+  const [searching, setSearching] = useState(false)
+  const [message, setMessage] = useState('')
+
+  function updateField(event) {
+    const { name, value } = event.target
+
+    setFields((current) => ({
+      ...current,
+      [name]: value,
+    }))
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+
+    const query = buildPatientSearchQuery(fields)
+
+    if (!query) {
+      setMessage('Enter an account number or patient name.')
+      setResults([])
+      return
+    }
+
+    setSearching(true)
+    setMessage('')
+
+    try {
+      const response = await searchPatients(query)
+
+      if (response.status !== 200 || !Array.isArray(response.data)) {
+        setResults([])
+        setMessage(response?.message || 'Unable to search patients.')
+        return
+      }
+
+      setResults(response.data)
+
+      if (response.data.length === 1) {
+        onSelect(response.data[0].id)
+        return
+      }
+
+      if (response.data.length === 0) {
+        setMessage('No matching patients found.')
+      }
+    } catch (error) {
+      setResults([])
+      setMessage(error.message || 'Unable to search patients.')
+    } finally {
+      setSearching(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-900/30 p-5" role="presentation">
+      <section
+        className="max-h-[calc(100vh-40px)] w-full max-w-[920px] overflow-auto rounded-lg border border-[#d9e2ea] bg-white shadow-[0_24px_70px_rgba(15,23,42,0.24)]"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="patient-search-title"
+      >
+        <form onSubmit={handleSubmit}>
+          <div className="flex items-center justify-between gap-4 border-b border-[#edf2f7] px-[18px] py-4">
+            <div>
+              <h2 id="patient-search-title" className="m-0 text-[22px] font-extrabold text-mp-strong">Patient Search</h2>
+              <p className="mt-[3px] mb-0 text-sm text-mp-muted">Find a patient by account or name</p>
+            </div>
+            <button
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#d7e1ea] bg-white text-slate-600 transition hover:border-sky-200 hover:bg-[#f3f7ff] hover:text-[#2563eb]"
+              type="button"
+              aria-label="Close"
+              onClick={onClose}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="2" />
+              </svg>
+            </button>
+          </div>
+
+          <div className="grid gap-4 px-[18px] py-4">
+            <div className="grid gap-3 md:grid-cols-3">
+              <label className="grid min-w-0 gap-[5px] text-xs font-extrabold uppercase text-[#64748b]">
+                <span>Account</span>
+                <input className="min-h-[42px] rounded-lg border border-[#d9e2ea] bg-white px-2.5 text-mp-strong outline-none" name="account" value={fields.account} onChange={updateField} />
+              </label>
+              <label className="grid min-w-0 gap-[5px] text-xs font-extrabold uppercase text-[#64748b]">
+                <span>Last Name</span>
+                <input className="min-h-[42px] rounded-lg border border-[#d9e2ea] bg-white px-2.5 text-mp-strong outline-none" name="lastName" value={fields.lastName} onChange={updateField} />
+              </label>
+              <label className="grid min-w-0 gap-[5px] text-xs font-extrabold uppercase text-[#64748b]">
+                <span>First Name</span>
+                <input className="min-h-[42px] rounded-lg border border-[#d9e2ea] bg-white px-2.5 text-mp-strong outline-none" name="firstName" value={fields.firstName} onChange={updateField} />
+              </label>
+            </div>
+
+            {message ? <div className={ui.message}>{message}</div> : null}
+
+            <div className="grid max-h-[380px] gap-2 overflow-auto">
+              {results.map((result) => (
+                <button
+                  type="button"
+                  className="flex flex-col gap-1 rounded-lg border border-mp-line bg-white px-3.5 py-3 text-left text-sm text-mp-text transition hover:border-sky-200 hover:bg-[#eef5ff]"
+                  key={result.id}
+                  onClick={() => onSelect(result.id)}
+                >
+                  <span className="font-extrabold text-mp-strong">{searchResultName(result)}</span>
+                  <span>{searchResultMeta(result)}</span>
+                </button>
+              ))}
+
+              {!results.length && !message ? (
+                <div className={ui.empty}>Search results will appear here.</div>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-4 border-t border-[#edf2f7] bg-[#fbfdff] px-[18px] py-4">
+            <button
+              className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[#d7e1ea] bg-white px-4 font-bold text-slate-600 transition hover:border-sky-200 hover:bg-[#f3f7ff] hover:text-[#2563eb]"
+              type="button"
+              onClick={onClose}
+            >
+              Cancel
+            </button>
+            <button
+              className="inline-flex min-h-10 min-w-[150px] items-center justify-center rounded-lg bg-mp-blue-700 px-4 font-bold text-white transition hover:bg-mp-blue-900"
+              type="submit"
+              disabled={searching}
+            >
+              {searching ? 'Searching' : 'Search'}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  )
+}
+
+function SwitchPatientModal({ currentPatientId, recentPatients, onClose, onSelect }) {
+  const [query, setQuery] = useState('')
+
+  const filteredPatients = useMemo(
+    () => recentPatients.filter((patient) => recentPatientMatches(patient, query)),
+    [query, recentPatients],
+  )
+
+  return (
+    <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-900/30 p-5" role="presentation">
+      <section
+        className="max-h-[calc(100vh-40px)] w-full max-w-[920px] overflow-auto rounded-lg border border-[#d9e2ea] bg-white shadow-[0_24px_70px_rgba(15,23,42,0.24)]"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="switch-patient-title"
+      >
+        <div className="flex items-center justify-between gap-4 border-b border-[#edf2f7] px-[18px] py-4">
+          <div>
+            <h2 id="switch-patient-title" className="m-0 text-[22px] font-extrabold text-mp-strong">Switch Patient</h2>
+            <p className="mt-[3px] mb-0 text-sm text-mp-muted">Previously opened patients</p>
+          </div>
+          <button
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#d7e1ea] bg-white text-slate-600 transition hover:border-sky-200 hover:bg-[#f3f7ff] hover:text-[#2563eb]"
+            type="button"
+            aria-label="Close"
+            onClick={onClose}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="2" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="grid gap-4 px-[18px] py-4">
+          <label className="grid min-w-0 gap-[5px] text-xs font-extrabold uppercase text-[#64748b]">
+            <span>Name or Account</span>
+            <input
+              className="min-h-[42px] rounded-lg border border-[#d9e2ea] bg-white px-2.5 text-mp-strong outline-none"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </label>
+
+          <div className="grid max-h-[380px] gap-2 overflow-auto">
+            {filteredPatients.map((patient) => (
+              <button
+                type="button"
+                className="flex flex-col gap-1 rounded-lg border border-mp-line bg-white px-3.5 py-3 text-left text-sm text-mp-text transition hover:border-sky-200 hover:bg-[#eef5ff]"
+                key={patient.id}
+                onClick={() => onSelect(patient.id)}
+              >
+                <span className="font-extrabold text-mp-strong">
+                  {searchResultName(patient)}
+                  {String(patient.id) === String(currentPatientId) ? ' (Current)' : ''}
+                </span>
+                <span>{searchResultMeta(patient)}</span>
+              </button>
+            ))}
+
+            {!filteredPatients.length ? (
+              <div className={ui.empty}>No recently opened patients.</div>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-4 border-t border-[#edf2f7] bg-[#fbfdff] px-[18px] py-4">
+          <button
+            className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[#d7e1ea] bg-white px-4 font-bold text-slate-600 transition hover:border-sky-200 hover:bg-[#f3f7ff] hover:text-[#2563eb]"
+            type="button"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function PatientAlertModal({ activity, onClose }) {
+  const alertNotes = getAlertNotes(activity)
+  const fallbackNotes = alertNotes.length ? alertNotes : (activity?.notes || []).slice(0, 3)
+  const summaryRows = getAlertSummaryRows(activity)
+
+  return (
+    <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-900/30 p-5" role="presentation">
+      <section
+        className="max-h-[calc(100vh-40px)] w-full max-w-[920px] overflow-auto rounded-lg border border-[#d9e2ea] bg-white shadow-[0_24px_70px_rgba(15,23,42,0.24)]"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="patient-alert-title"
+      >
+        <div className="flex items-center justify-between gap-4 border-b border-[#edf2f7] px-[18px] py-4">
+          <div>
+            <h2 id="patient-alert-title" className="m-0 text-[22px] font-extrabold text-mp-strong">Patient Alert</h2>
+            <p className="mt-[3px] mb-0 text-sm text-mp-muted">{fullName(activity?.patient) || 'Patient'}</p>
+          </div>
+          <button
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#d7e1ea] bg-white text-slate-600 transition hover:border-sky-200 hover:bg-[#f3f7ff] hover:text-[#2563eb]"
+            type="button"
+            aria-label="Close"
+            onClick={onClose}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" strokeWidth="2" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="grid gap-4 px-[18px] py-4">
+          <div className="grid gap-4 lg:grid-cols-[minmax(220px,0.85fr)_minmax(0,1.15fr)]">
+            <section className="grid content-start gap-3 rounded-lg border border-[#edf2f7] bg-[#fbfdff] p-3">
+              <div className="font-extrabold text-mp-strong">Current Flags</div>
+              {summaryRows.length ? (
+                <div className="grid gap-2">
+                  {summaryRows.map(([label, value]) => (
+                    <div className="grid items-start gap-2.5 [grid-template-columns:minmax(96px,0.9fr)_minmax(0,1.1fr)] max-[720px]:grid-cols-1" key={label}>
+                      <div className="text-xs font-bold uppercase text-[#7a8798]">{label}</div>
+                      <div className="min-w-0 text-right font-semibold text-mp-strong [overflow-wrap:anywhere] max-[720px]:text-left">{value}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState message="No patient flags." />
+              )}
+            </section>
+
+            <section className="grid content-start gap-3 rounded-lg border border-[#edf2f7] bg-[#fbfdff] p-3">
+              <div className="font-extrabold text-mp-strong">{alertNotes.length ? 'Alert Notes' : 'Recent Notes'}</div>
+              {fallbackNotes.length ? (
+                <div className="grid gap-2.5">
+                  {fallbackNotes.map((note) => (
+                    <article className="grid gap-2 rounded-lg border border-[#edf2f7] bg-white p-3" key={note.id}>
+                      <div className="flex items-center justify-between gap-3 text-xs font-bold text-[#64748b]">
+                        <StatusPill value={note.noteType} />
+                        <span>{formatDateTime(note.createdAt)}</span>
+                      </div>
+                      <p className="m-0 leading-6 text-slate-700">{note.body}</p>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState message="No alerts on file." />
+              )}
+            </section>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-4 border-t border-[#edf2f7] bg-[#fbfdff] px-[18px] py-4">
+          <button
+            className="inline-flex min-h-10 items-center justify-center rounded-lg border border-[#d7e1ea] bg-white px-4 font-bold text-slate-600 transition hover:border-sky-200 hover:bg-[#f3f7ff] hover:text-[#2563eb]"
+            type="button"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
       </section>
     </div>
   )
@@ -569,7 +1011,11 @@ export default function PatientActivity() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [isAddPatientOpen, setIsAddPatientOpen] = useState(false)
+  const [isPatientSearchOpen, setIsPatientSearchOpen] = useState(false)
+  const [isSwitchPatientOpen, setIsSwitchPatientOpen] = useState(false)
+  const [isAlertOpen, setIsAlertOpen] = useState(false)
   const [languages, setLanguages] = useState([])
+  const [recentPatients, setRecentPatients] = useState(() => readRecentPatients())
   const [selectedInsuranceId, setSelectedInsuranceId] = useState(null)
   const inputRef = useRef(null)
 
@@ -641,14 +1087,21 @@ export default function PatientActivity() {
 
     try {
       const response = await getPatientActivity(patientId)
-      if(response.status !== 200){
-        setMessage(response.data.message);
+
+      if (response.status !== 200) {
+        setMessage(response.data.message)
         return
       }
+
       setSelectedInsuranceId(null)
       setActivity(response.data)
       setSearchResults([])
       setAccountValue(String(response.data.patient.id))
+      setRecentPatients((currentPatients) => {
+        const nextPatients = rememberRecentPatient(currentPatients, response.data)
+        writeRecentPatients(nextPatients)
+        return nextPatients
+      })
     } catch (error) {
       setMessage(error.message)
     } finally {
@@ -692,53 +1145,83 @@ export default function PatientActivity() {
   }
 
   async function handlePatientCreated(createdPatient) {
-    console.log(createdPatient)
     setIsAddPatientOpen(false)
     await loadActivity(createdPatient.id)
   }
 
+  async function handlePatientSelected(patientId) {
+    setIsPatientSearchOpen(false)
+    setIsSwitchPatientOpen(false)
+    setIsAlertOpen(false)
+    await loadActivity(patientId)
+  }
+
+  function openAlertPanel() {
+    if (!activity?.patient?.id) {
+      setMessage('Select a patient first.')
+      return
+    }
+
+    setIsAlertOpen(true)
+  }
+
   return (
     <MainLayout>
-      <section id="patient-activity" className="pa-screen">
-        <form className="pa-accbar card" onSubmit={handleSearch}>
-          <label htmlFor="pa-acc-input" className="acc-label">Account:</label>
-          <div className="acc-group">
+      <section id="patient-activity" className="w-full">
+        <form className={cn(ui.barePanel, 'my-2 grid gap-3 max-[860px]:grid-cols-1 lg:flex lg:items-center')} onSubmit={handleSearch}>
+          <label htmlFor="pa-acc-input" className="font-bold text-mp-strong">Account:</label>
+          <div className="flex min-w-0 lg:min-w-[320px] lg:flex-1">
             <input
               ref={inputRef}
               id="pa-acc-input"
-              className="w-input acc-input"
+              className={cn(ui.input, 'rounded-r-none border-r-0')}
               type="text"
               value={accountValue}
               onChange={(event) => setAccountValue(event.target.value)}
               placeholder="ID or name..."
             />
-            <button id="pa-acc-go" className="w-button acc-go" type="submit" disabled={loading}>
+            <button
+              id="pa-acc-go"
+              className={cn(ui.primaryButton, 'min-w-[72px] rounded-l-none')}
+              type="submit"
+              disabled={loading}
+            >
               {loading ? 'Loading' : 'Go'}
             </button>
           </div>
 
-          <div className="acc-actions">
-            <button className="btn-outline acc-btn" title="Switch patients" type="button" onClick={() => setActivity(null)}>
-              <svg viewBox="0 0 24 24" aria-hidden="true">
+          <div className="ml-auto flex flex-wrap gap-2 max-[860px]:w-full lg:justify-end">
+            <button
+              className={cn(ui.secondaryButton, 'max-[520px]:w-full max-[520px]:justify-start')}
+              title="Switch patients"
+              type="button"
+              onClick={() => setIsSwitchPatientOpen(true)}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" className="h-[18px] w-[18px] shrink-0 fill-none stroke-current stroke-2">
                 <path d="M7 7h13M17 3l4 4-4 4M17 17H4M7 13l-4 4 4 4" fill="none" stroke="currentColor" strokeWidth="2" />
               </svg>
               <span>Switch patients</span>
             </button>
-            <button className="btn-outline acc-btn" title="Patient search" type="button" onClick={handleSearch}>
-              <svg viewBox="0 0 24 24" aria-hidden="true">
+            <button
+              className={cn(ui.secondaryButton, 'max-[520px]:w-full max-[520px]:justify-start')}
+              title="Patient search"
+              type="button"
+              onClick={() => setIsPatientSearchOpen(true)}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" className="h-[18px] w-[18px] shrink-0 fill-none stroke-current stroke-2">
                 <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" strokeWidth="2" />
                 <path d="m16 16 5 5" fill="none" stroke="currentColor" strokeWidth="2" />
               </svg>
               <span>Patient search</span>
             </button>
-            <button className="btn-outline acc-btn" title="Add patient" type="button" onClick={() => setIsAddPatientOpen(true)}>
-              <svg viewBox="0 0 24 24" aria-hidden="true">
+            <button className={cn(ui.secondaryButton, 'max-[520px]:w-full max-[520px]:justify-start')} title="Add patient" type="button" onClick={() => setIsAddPatientOpen(true)}>
+              <svg viewBox="0 0 24 24" aria-hidden="true" className="h-[18px] w-[18px] shrink-0 fill-none stroke-current stroke-2">
                 <path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" strokeWidth="2" />
               </svg>
               <span>Add patient</span>
             </button>
-            <button className="btn-outline acc-btn" title="Alert" type="button">
-              <svg viewBox="0 0 24 24" aria-hidden="true">
+            <button className={cn(ui.secondaryButton, 'max-[520px]:w-full max-[520px]:justify-start')} title="Alert" type="button" onClick={openAlertPanel}>
+              <svg viewBox="0 0 24 24" aria-hidden="true" className="h-[18px] w-[18px] shrink-0 fill-none stroke-current stroke-2">
                 <path d="M12 3 2 21h20L12 3zM12 9v5M12 17h.01" fill="none" stroke="currentColor" strokeWidth="2" />
               </svg>
               <span>Alert</span>
@@ -754,66 +1237,100 @@ export default function PatientActivity() {
           />
         ) : null}
 
-        {message ? <div className="pa-message">{message}</div> : null}
+        {isPatientSearchOpen ? (
+          <PatientSearchModal
+            initialQuery={accountValue}
+            onClose={() => setIsPatientSearchOpen(false)}
+            onSelect={handlePatientSelected}
+          />
+        ) : null}
+
+        {isSwitchPatientOpen ? (
+          <SwitchPatientModal
+            currentPatientId={activity?.patient?.id}
+            recentPatients={recentPatients}
+            onClose={() => setIsSwitchPatientOpen(false)}
+            onSelect={handlePatientSelected}
+          />
+        ) : null}
+
+        {isAlertOpen && activity ? (
+          <PatientAlertModal
+            activity={activity}
+            onClose={() => setIsAlertOpen(false)}
+          />
+        ) : null}
+
+        {message ? <div className={ui.message}>{message}</div> : null}
 
         {searchResults.length > 1 ? (
-          <div className="pa-search-results">
+          <div className="my-2 grid gap-2">
             {searchResults.map((result) => (
-              <button type="button" className="pa-search-row" key={result.id} onClick={() => loadActivity(result.id)}>
-                <span className="pa-search-name">{searchResultName(result)}</span>
-                <span>{formatDate(result.dateOfBirth)} | {humanize(result.sexAtBirth)} | #{result.id}</span>
+              <button
+                type="button"
+                className="flex justify-between gap-4 rounded-lg border border-mp-line bg-white px-3.5 py-3 text-left text-mp-text transition hover:bg-[#eef5ff] max-[720px]:grid max-[720px]:grid-cols-1"
+                key={result.id}
+                onClick={() => loadActivity(result.id)}
+              >
+                <span className="font-bold text-mp-strong">{searchResultName(result)}</span>
+                <span>{searchResultMeta(result)}</span>
               </button>
             ))}
           </div>
         ) : null}
 
         {!activity ? (
-          <div className="pa-start pa-card">
-            <div className="pa-start-title">Patient Activity</div>
-            <div className="pa-start-subtitle">Enter a patient id or search by last name.</div>
+          <div className={cn(ui.panel, 'grid min-h-[220px] place-content-center text-center')}>
+            <div className="text-[28px] font-extrabold text-mp-strong">Patient Activity</div>
+            <div className="mt-2 text-mp-muted">Enter a patient id or search by last name.</div>
           </div>
         ) : (
-          <div className="pa-grid">
-            <aside className="pa-col-left">
-              <div className="pa-card pi-card">
-                <div className="pi-head">
-                  <div className="pi-title">Patient Information</div>
+          <div className="grid gap-4 xl:grid-cols-[minmax(260px,0.36fr)_minmax(0,1fr)]">
+            <aside className="grid min-w-0 content-start gap-4">
+              <div className={cn(ui.panel, 'text-center')}>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="font-extrabold text-mp-strong">Patient Information</div>
                   <DotsButton />
                 </div>
 
-                <div className="pi-photo-wrap">
+                <div className="my-2.5 flex justify-center">
                   <div
-                    className="pi-photo"
+                    className="h-[104px] w-[104px] rounded-full border-4 border-[#edf3f8] bg-gray-100 bg-cover bg-center"
                     aria-label="Patient"
                     style={{ backgroundImage: `url(${avatar})` }}
                   />
                 </div>
 
-                <div className="pi-name">{fullName(patient)}</div>
-                <div className="pi-meta">
-                  <div>Acct: <b>{patient.id}</b> <span className="sep">-</span> Sex: <b>{humanize(patient.sexAtBirth)}</b></div>
-                  <div>DOB: <b>{formatDate(patient.dateOfBirth)}</b> <span className="sep">-</span> Age: <b>{ageText(patient.dateOfBirth)}</b></div>
+                <div className="text-xl font-extrabold text-mp-strong">{fullName(patient)}</div>
+                <div className="mt-2 grid gap-1 text-[13px] text-[#64748b]">
+                  <div>Acct: <b>{patient.id}</b> <span className="text-[#b0b7c3]">-</span> Sex: <b>{humanize(patient.sexAtBirth)}</b></div>
+                  <div>DOB: <b>{formatDate(patient.dateOfBirth)}</b> <span className="text-[#b0b7c3]">-</span> Age: <b>{ageText(patient.dateOfBirth)}</b></div>
                 </div>
               </div>
 
-              <Card className="keyids-card" title="Key Info">
+              <Card title="Key Info">
                 <KvList rows={keyInfo} />
               </Card>
 
-              <Card className="contacts-card" title="Contacts">
+              <Card title="Contacts">
                 <KvList rows={contacts} />
               </Card>
             </aside>
 
-            <section className="pa-col-right">
-              <div className={`pa-row-1${showDemographicsCards ? '' : ' pa-row-1--overview-only'}`}>
-                <div className="pa-card overview-card">
-                  <div className="card-head with-tabs">
-                    <div className="card-title">Overview</div>
-                    <div className="ov-tabs" role="tablist" aria-label="Overview sections">
+            <section className="grid min-w-0 content-start gap-4">
+              <div className={cn('grid gap-4', showDemographicsCards ? 'xl:grid-cols-[minmax(0,1fr)_minmax(260px,0.36fr)]' : 'grid-cols-1')}>
+                <div className={ui.panel}>
+                  <div className="mb-3 grid gap-3 sm:flex sm:items-start sm:justify-between">
+                    <div className="font-extrabold text-mp-strong">Overview</div>
+                    <div className="flex flex-wrap gap-2 sm:justify-end" role="tablist" aria-label="Overview sections">
                       {overviewTabs.map((tab) => (
                         <button
-                          className={`ov-tab${activeTab === tab ? ' is-active' : ''}`}
+                          className={cn(
+                            'min-h-8 rounded-full border px-2.5 py-1.5 font-bold',
+                            activeTab === tab
+                              ? 'border-[#cfe7ff] bg-[#e9f5ff] text-[#2563eb]'
+                              : 'border-[#d7e1ea] bg-white text-[#64748b]',
+                          )}
                           role="tab"
                           aria-selected={activeTab === tab}
                           type="button"
@@ -826,7 +1343,7 @@ export default function PatientActivity() {
                     </div>
                   </div>
 
-                  <div className="ov-inner card">
+                  <div className={cn(ui.subPanel, 'border p-3.5')}>
                     <OverviewRows
                       tab={activeTab}
                       activity={activity}
@@ -835,8 +1352,8 @@ export default function PatientActivity() {
                       onInsuranceSelect={setSelectedInsuranceId}
                     />
 
-                    <div className="ov-actions">
-                      <button id="btn-ov-edit" className="btn-outline" type="button">
+                    <div className="mt-3 flex justify-end">
+                      <button id="btn-ov-edit" className={ui.secondaryButton} type="button">
                         Edit
                       </button>
                     </div>
@@ -844,23 +1361,23 @@ export default function PatientActivity() {
                 </div>
 
                 {showDemographicsCards ? (
-                  <aside className="pa-card notes-card" aria-label="General Notes">
-                    <div className="card-head">
-                      <div className="card-title">General Notes</div>
+                  <aside className={cn(ui.panel, 'grid grid-rows-[auto_minmax(120px,1fr)_auto]')} aria-label="General Notes">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div className="font-extrabold text-mp-strong">General Notes</div>
                     </div>
 
-                    <div className="notes-body">
+                    <div className="overflow-auto leading-6 text-slate-700">
                       {latestNote ? (
                         <>
-                          <p>{latestNote.body}</p>
-                          <div className="pa-note-date">{formatDateTime(latestNote.createdAt)}</div>
+                          <p className="mb-2.5">{latestNote.body}</p>
+                          <div className="text-xs text-[#64748b]">{formatDateTime(latestNote.createdAt)}</div>
                         </>
                       ) : (
                         <EmptyState message="No notes" />
                       )}
                     </div>
 
-                    <button id="btn-add-note" className="w-button notes-add edit-note-btn" type="button">
+                    <button id="btn-add-note" className={cn(ui.primaryButton, 'mt-3')} type="button">
                       Edit Note
                     </button>
                   </aside>
@@ -868,8 +1385,8 @@ export default function PatientActivity() {
               </div>
 
               {showDemographicsCards ? (
-                <div className="pa-row-2">
-                  <Card className="ins-card" title="Insurance">
+                <div className="grid gap-4 xl:grid-cols-3">
+                  <Card title="Insurance">
                     {insurancePolicies.length ? (
                       <KvList rows={insurance} />
                     ) : (
@@ -877,19 +1394,19 @@ export default function PatientActivity() {
                     )}
                   </Card>
 
-                  <Card className="other-card" title="Other">
+                  <Card title="Other">
                     <KvList rows={other} />
                   </Card>
 
-                  <Card className="fam-card" title="Recent Visits">
+                  <Card title="Recent Visits">
                     <CompactList
                       items={activity.visits}
                       empty="No visits"
                       renderItem={(visit) => (
-                        <div className="fam-row" key={visit.id}>
+                        <div className="flex items-center justify-between gap-3 border-t border-[#eef2f7] py-2 first:border-t-0 first:pt-0" key={visit.id}>
                           <div>
-                            <div className="fam-name linky">{formatDate(visit.visitDate)}</div>
-                            <div className="fam-meta">
+                            <div className="font-bold text-[#2563eb]">{formatDate(visit.visitDate)}</div>
+                            <div className="text-xs text-[#64748b]">
                               {[visit.providerName || visit.visitType || 'Visit', vitalsText(visit)].filter(Boolean).join(' | ')}
                             </div>
                           </div>
@@ -902,12 +1419,12 @@ export default function PatientActivity() {
               ) : null}
 
               {showClinicalCards ? (
-                <div className="pa-row-3">
-                  <Card className="activity-card" title="Timeline">
+                <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)]">
+                  <Card title="Timeline">
                     <Timeline items={activity.timeline} />
                   </Card>
 
-                  <Card className="clinical-card" title="Clinical">
+                  <Card title="Clinical">
                     <CompactList
                       items={[
                         ...activity.problems.map((item) => ({ ...item, kind: 'Problem', title: item.description })),
@@ -917,10 +1434,10 @@ export default function PatientActivity() {
                       ]}
                       empty="No clinical records"
                       renderItem={(item) => (
-                        <div className="pa-clinical-row" key={`${item.kind}-${item.id}`}>
+                        <div className="flex items-center justify-between gap-3 border-t border-[#eef2f7] py-2 first:border-t-0 first:pt-0" key={`${item.kind}-${item.id}`}>
                           <div>
-                            <div className="pa-clinical-title">{item.title}</div>
-                            <div className="pa-clinical-meta">{item.kind}</div>
+                            <div className="font-bold text-mp-strong">{item.title}</div>
+                            <div className="text-xs text-[#64748b]">{item.kind}</div>
                           </div>
                           <StatusPill value={item.status} />
                         </div>
@@ -930,12 +1447,12 @@ export default function PatientActivity() {
                 </div>
               ) : null}
 
-              <div className="pa-row-actions">
-                <div className="pa-card actions-card">
-                  <div className="actions-wrap">
+              <div className="grid">
+                <div className={cn(ui.panel, 'p-3')}>
+                  <div className="grid gap-2 max-[720px]:grid-cols-1 md:grid-cols-4 xl:grid-cols-6">
                     {actions.map((action) => (
-                      <button className="btn-outline action-btn" type="button" key={action}>
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <button className={cn(ui.secondaryButton, 'min-w-0')} type="button" key={action}>
+                        <svg viewBox="0 0 24 24" aria-hidden="true" className="h-[18px] w-[18px] shrink-0 fill-none stroke-current stroke-2">
                           <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" strokeWidth="2" />
                           <path d="M12 8v8M8 12h8" fill="none" stroke="currentColor" strokeWidth="2" />
                         </svg>

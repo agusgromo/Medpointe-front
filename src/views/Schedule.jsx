@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import MainLayout from '../components/MainLayout'
+import { cn, statusPillClasses, ui } from '../components/ui'
 import { searchPatients } from '../services/patients'
 import {
   createAppointment,
@@ -113,15 +114,19 @@ function appointmentDuration(appointment) {
   return minutes ? `${minutes} min` : ''
 }
 
-function statusClass(value) {
-  return `pa-pill pa-pill--${String(value || '').toLowerCase().replaceAll('_', '-')}`
-}
-
 function ScheduleMetric({ label, value, tone = 'default' }) {
+  const toneClass = {
+    blue: 'border-l-[#4190f5]',
+    green: 'border-l-[#10b981]',
+    slate: 'border-l-[#475569]',
+    amber: 'border-l-[#f59e0b]',
+    default: 'border-l-[#94a3b8]',
+  }[tone] || 'border-l-[#94a3b8]'
+
   return (
-    <div className={`schedule-metric schedule-metric--${tone}`}>
-      <div className="schedule-metric-value">{value}</div>
-      <div className="schedule-metric-label">{label}</div>
+    <div className={cn('min-w-0 rounded-lg border border-mp-line border-l-[5px] bg-white p-3.5', toneClass)}>
+      <div className="text-[28px] leading-none font-extrabold text-mp-strong">{value}</div>
+      <div className="mt-1.5 text-xs font-extrabold uppercase text-[#64748b]">{label}</div>
     </div>
   )
 }
@@ -492,33 +497,33 @@ export default function Schedule() {
 
   return (
     <MainLayout>
-      <section className="schedule-screen">
-        <div className="schedule-topbar">
-          <div className="schedule-title-block">
-            <div className="schedule-title-icon">
+      <section className="grid w-full gap-4">
+        <div className="grid gap-4 rounded-lg border border-mp-line bg-white p-3.5 lg:flex lg:items-end lg:justify-between">
+          <div className="flex min-w-[220px] items-center gap-3">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-[#eef5ff] text-[#2563eb] [&_svg]:h-5 [&_svg]:w-5 [&_svg]:fill-none [&_svg]:stroke-current [&_svg]:stroke-[1.8] [&_svg]:stroke-linecap-round [&_svg]:stroke-linejoin-round">
               <ScheduleIcon />
             </div>
             <div>
-              <h1>Schedule</h1>
-              <div className="schedule-subtitle">{formatDate(selectedDate)}</div>
+              <h1 className="m-0 text-2xl leading-tight font-extrabold text-mp-strong">Schedule</h1>
+              <div className="text-xs text-[#64748b]">{formatDate(selectedDate)}</div>
             </div>
           </div>
 
-          <div className="schedule-controls">
-            <label>
+          <div className="grid w-full items-end gap-2.5 md:grid-cols-2 lg:w-full lg:max-w-[980px] lg:grid-cols-[minmax(150px,0.9fr)_minmax(160px,1fr)_minmax(150px,1fr)_minmax(140px,0.8fr)_auto]">
+            <label className={ui.label}>
               <span>Date</span>
               <input
-                className="w-input"
+                className={ui.input}
                 type="date"
                 value={selectedDate}
                 onChange={(event) => changeSelectedDate(event.target.value)}
               />
             </label>
 
-            <label>
+            <label className={ui.label}>
               <span>Provider</span>
               <select
-                className="w-input"
+                className={ui.input}
                 value={filters.providerId}
                 onChange={(event) => updateFilter('providerId', event.target.value)}
               >
@@ -529,10 +534,10 @@ export default function Schedule() {
               </select>
             </label>
 
-            <label>
+            <label className={ui.label}>
               <span>Location</span>
               <select
-                className="w-input"
+                className={ui.input}
                 value={filters.locationId}
                 onChange={(event) => updateFilter('locationId', event.target.value)}
               >
@@ -543,10 +548,10 @@ export default function Schedule() {
               </select>
             </label>
 
-            <label>
+            <label className={ui.label}>
               <span>Status</span>
               <select
-                className="w-input"
+                className={ui.input}
                 value={filters.status}
                 onChange={(event) => updateFilter('status', event.target.value)}
               >
@@ -557,67 +562,71 @@ export default function Schedule() {
               </select>
             </label>
 
-            <button className="btn-outline schedule-refresh" type="button" onClick={loadSchedule} disabled={loading}>
+            <button className={cn(ui.secondaryButton, 'whitespace-nowrap max-md:w-full')} type="button" onClick={loadSchedule} disabled={loading}>
               <RefreshIcon />
               <span>{loading ? 'Loading' : 'Refresh'}</span>
             </button>
           </div>
         </div>
 
-        {message ? <div className="pa-message">{message}</div> : null}
+        {message ? <div className={ui.message}>{message}</div> : null}
 
-        <div className="schedule-metrics">
+        <div className="grid gap-3 max-[520px]:grid-cols-1 md:grid-cols-2 xl:grid-cols-4">
           <ScheduleMetric label="Appointments" value={appointments.length} tone="blue" />
           <ScheduleMetric label="In Clinic" value={metrics.checkedIn} tone="green" />
           <ScheduleMetric label="Completed" value={metrics.completed} tone="slate" />
           <ScheduleMetric label="Billing Open" value={metrics.openBilling} tone="amber" />
         </div>
 
-        <div className="schedule-layout">
-          <div className="schedule-panel schedule-board">
-            <div className="schedule-panel-head">
+        <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
+          <div className={ui.panel}>
+            <div className="mb-3 flex items-center justify-between gap-3">
               <div>
-                <div className="schedule-panel-title">Day View</div>
-                <div className="schedule-panel-subtitle">{appointments.length} appointments</div>
+                <div className={ui.sectionTitle}>Day View</div>
+                <div className={ui.sectionSubtitle}>{appointments.length} appointments</div>
               </div>
             </div>
 
-            <div className="schedule-table-wrap">
-              <table className="schedule-table">
+            <div className="overflow-auto rounded-lg border border-[#edf2f7]">
+              <table className="min-w-[900px] w-full border-collapse">
                 <thead>
                   <tr>
-                    <th>Time</th>
-                    <th>Patient</th>
-                    <th>Type</th>
-                    <th>Provider</th>
-                    <th>Room</th>
-                    <th>Status</th>
-                    <th>Billing</th>
+                    {['Time', 'Patient', 'Type', 'Provider', 'Room', 'Status', 'Billing'].map((heading) => (
+                      <th
+                        key={heading}
+                        className="sticky top-0 z-[1] bg-slate-50 px-3 py-2.5 text-left text-xs font-extrabold uppercase text-slate-600"
+                      >
+                        {heading}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
                   {appointments.map((appointment) => (
                     <tr
-                      className={appointment.id === activeAppointment?.id ? 'is-selected' : ''}
+                      className={cn(
+                        'cursor-pointer border-b border-[#eef2f7] hover:bg-[#f2f7ff]',
+                        appointment.id === activeAppointment?.id ? 'bg-[#f2f7ff]' : '',
+                      )}
                       key={appointment.id}
                       onClick={() => setActiveAppointmentId(appointment.id)}
                     >
-                      <td>
-                        <div className="schedule-time">{formatTime(appointment.scheduledStart)}</div>
-                        <div className="schedule-cell-sub">{appointmentDuration(appointment)}</div>
+                      <td className="px-3 py-2.5 align-middle">
+                        <div className="font-extrabold text-mp-strong">{formatTime(appointment.scheduledStart)}</div>
+                        <div className="text-xs text-[#64748b]">{appointmentDuration(appointment)}</div>
                       </td>
-                      <td>
-                        <div className="schedule-patient">{appointment.patientName || 'Unassigned'}</div>
-                        <div className="schedule-cell-sub">
+                      <td className="px-3 py-2.5 align-middle">
+                        <div className="font-extrabold text-mp-strong">{appointment.patientName || 'Unassigned'}</div>
+                        <div className="text-xs text-[#64748b]">
                           #{appointment.patientId || '-'} {appointment.mobilePhone || ''}
                         </div>
                       </td>
-                      <td>{appointment.appointmentTypeName || '-'}</td>
-                      <td>{appointment.providerName || '-'}</td>
-                      <td>{appointment.roomName || appointment.locationName || '-'}</td>
-                      <td>
+                      <td className="px-3 py-2.5 align-middle">{appointment.appointmentTypeName || '-'}</td>
+                      <td className="px-3 py-2.5 align-middle">{appointment.providerName || '-'}</td>
+                      <td className="px-3 py-2.5 align-middle">{appointment.roomName || appointment.locationName || '-'}</td>
+                      <td className="px-3 py-2.5 align-middle">
                         <select
-                          className="schedule-status-select"
+                          className="min-h-[34px] min-w-[140px] rounded-lg border border-[#d9e2ea] bg-white px-2.5 font-bold text-mp-strong"
                           value={appointment.status}
                           onClick={(event) => event.stopPropagation()}
                           onChange={(event) => handleStatusChange(appointment.id, event.target.value)}
@@ -627,11 +636,11 @@ export default function Schedule() {
                           ))}
                         </select>
                       </td>
-                      <td>
+                      <td className="px-3 py-2.5 align-middle">
                         {appointment.billingStatus ? (
-                          <span className={statusClass(appointment.billingStatus)}>{humanize(appointment.billingStatus)}</span>
+                          <span className={statusPillClasses(appointment.billingStatus)}>{humanize(appointment.billingStatus)}</span>
                         ) : (
-                          <span className="schedule-cell-sub">No claim</span>
+                          <span className="text-xs text-[#64748b]">No claim</span>
                         )}
                       </td>
                     </tr>
@@ -640,27 +649,27 @@ export default function Schedule() {
               </table>
 
               {!loading && appointments.length === 0 ? (
-                <div className="pa-empty">No appointments scheduled.</div>
+                <div className={ui.empty}>No appointments scheduled.</div>
               ) : null}
             </div>
           </div>
 
-          <aside className="schedule-side">
-            <form className="schedule-panel schedule-create" onSubmit={handleCreateAppointment}>
-              <div className="schedule-panel-head">
+          <aside className="grid gap-4 min-w-0">
+            <form className={ui.panel} onSubmit={handleCreateAppointment}>
+              <div className="mb-3 flex items-center justify-between gap-3 [&_svg]:h-5 [&_svg]:w-5 [&_svg]:fill-none [&_svg]:stroke-current [&_svg]:stroke-[1.8] [&_svg]:stroke-linecap-round [&_svg]:stroke-linejoin-round">
                 <div>
-                  <div className="schedule-panel-title">New Appointment</div>
-                  <div className="schedule-panel-subtitle">Patient search and scheduling</div>
+                  <div className={ui.sectionTitle}>New Appointment</div>
+                  <div className={ui.sectionSubtitle}>Patient search and scheduling</div>
                 </div>
-                <PlusIcon />
+              <PlusIcon />
               </div>
 
-              <div className="schedule-form-grid">
-                <label className="span-2">
+              <div className="grid gap-3 max-[520px]:grid-cols-1 md:grid-cols-2">
+                <label className={cn(ui.label, 'md:col-span-2')}>
                   <span>Patient</span>
-                  <div className="schedule-patient-picker">
+                  <div className="grid items-center gap-2 max-[520px]:grid-cols-1 [grid-template-columns:minmax(0,1fr)_auto]">
                     <input
-                      className="w-input"
+                      className={ui.input}
                       type="text"
                       value={patientSearchTerm}
                       onChange={(event) => updatePatientSearch(event.target.value)}
@@ -668,7 +677,7 @@ export default function Schedule() {
                     />
                     {selectedPatient ? (
                       <button
-                        className="btn-outline schedule-picker-clear"
+                        className={cn(ui.secondaryButton, 'min-h-10 whitespace-nowrap max-[520px]:w-full')}
                         type="button"
                         onClick={clearSelectedPatient}
                       >
@@ -678,12 +687,12 @@ export default function Schedule() {
                   </div>
 
                   {selectedPatient ? (
-                    <div className="schedule-selected-patient">
-                      <b>{patientSearchName(selectedPatient, true)}</b>
-                      <span>{patientSearchDetails(selectedPatient)}</span>
+                    <div className="grid gap-1 rounded-lg border border-[#dbe7f2] bg-[#f8fbff] px-3 py-2.5">
+                      <b className="text-[13px] font-extrabold text-mp-strong">{patientSearchName(selectedPatient, true)}</b>
+                      <span className="text-xs text-[#64748b]">{patientSearchDetails(selectedPatient)}</span>
                     </div>
                   ) : (
-                    <div className="schedule-picker-help">
+                    <div className="text-xs font-semibold text-[#64748b]">
                       {patientSearchLoading
                         ? 'Searching patients...'
                         : 'Search by last name or account number, then choose a patient.'}
@@ -691,30 +700,30 @@ export default function Schedule() {
                   )}
 
                   {!selectedPatient && patientResults.length > 0 ? (
-                    <div className="schedule-picker-results">
+                    <div className="mt-2 grid max-h-[220px] gap-2 overflow-auto">
                       {patientResults.map((patient) => (
                         <button
-                          className="schedule-picker-row"
+                          className="grid gap-[3px] rounded-lg border border-mp-line bg-white px-3 py-2.5 text-left text-mp-text transition hover:bg-[#eef5ff]"
                           key={patient.id}
                           type="button"
                           onClick={() => selectPatient(patient)}
                         >
-                          <strong>{patientSearchName(patient, true)}</strong>
-                          <span>{patientSearchDetails(patient)}</span>
+                          <strong className="text-[13px] font-extrabold text-mp-strong">{patientSearchName(patient, true)}</strong>
+                          <span className="text-xs text-[#64748b]">{patientSearchDetails(patient)}</span>
                         </button>
                       ))}
                     </div>
                   ) : null}
 
                   {showPatientNoResults ? (
-                    <div className="schedule-picker-help">No matching patients found.</div>
+                    <div className="text-xs font-semibold text-[#64748b]">No matching patients found.</div>
                   ) : null}
                 </label>
 
-                <label>
+                <label className={ui.label}>
                   <span>Type</span>
                   <select
-                    className="w-input"
+                    className={ui.input}
                     value={form.appointmentTypeId}
                     onChange={(event) => updateForm('appointmentTypeId', event.target.value)}
                   >
@@ -725,10 +734,10 @@ export default function Schedule() {
                   </select>
                 </label>
 
-                <label>
+                <label className={ui.label}>
                   <span>Date</span>
                   <input
-                    className="w-input"
+                    className={ui.input}
                     type="date"
                     value={form.date}
                     onChange={(event) => updateForm('date', event.target.value)}
@@ -736,10 +745,10 @@ export default function Schedule() {
                   />
                 </label>
 
-                <label>
+                <label className={ui.label}>
                   <span>Time</span>
                   <input
-                    className="w-input"
+                    className={ui.input}
                     type="time"
                     value={form.time}
                     onChange={(event) => updateForm('time', event.target.value)}
@@ -747,10 +756,10 @@ export default function Schedule() {
                   />
                 </label>
 
-                <label>
+                <label className={ui.label}>
                   <span>Duration</span>
                   <input
-                    className="w-input"
+                    className={ui.input}
                     type="number"
                     min="5"
                     max="480"
@@ -760,10 +769,10 @@ export default function Schedule() {
                   />
                 </label>
 
-                <label>
+                <label className={ui.label}>
                   <span>Provider</span>
                   <select
-                    className="w-input"
+                    className={ui.input}
                     value={form.providerId}
                     onChange={(event) => updateForm('providerId', event.target.value)}
                   >
@@ -774,10 +783,10 @@ export default function Schedule() {
                   </select>
                 </label>
 
-                <label>
+                <label className={ui.label}>
                   <span>Location</span>
                   <select
-                    className="w-input"
+                    className={ui.input}
                     value={form.locationId}
                     onChange={(event) => updateForm('locationId', event.target.value)}
                   >
@@ -788,10 +797,10 @@ export default function Schedule() {
                   </select>
                 </label>
 
-                <label>
+                <label className={ui.label}>
                   <span>Room</span>
                   <select
-                    className="w-input"
+                    className={ui.input}
                     value={form.roomId}
                     onChange={(event) => updateForm('roomId', event.target.value)}
                   >
@@ -802,72 +811,64 @@ export default function Schedule() {
                   </select>
                 </label>
 
-                <label className="span-2">
+                <label className={cn(ui.label, 'md:col-span-2')}>
                   <span>Reason</span>
                   <input
-                    className="w-input"
+                    className={ui.input}
                     type="text"
                     value={form.reason}
                     onChange={(event) => updateForm('reason', event.target.value)}
                   />
                 </label>
 
-                <label className="span-2">
+                <label className={cn(ui.label, 'md:col-span-2')}>
                   <span>Notes</span>
                   <textarea
-                    className="w-input schedule-textarea"
+                    className={ui.textarea}
                     value={form.notes}
                     onChange={(event) => updateForm('notes', event.target.value)}
                   />
                 </label>
               </div>
 
-              <button className="w-button schedule-submit" type="submit" disabled={saving || !form.patientId}>
+              <button className={cn(ui.primaryButton, 'mt-3 w-full')} type="submit" disabled={saving || !form.patientId}>
                 {saving ? 'Saving' : 'Create Appointment'}
               </button>
             </form>
 
-            <div className="schedule-panel schedule-detail">
-              <div className="schedule-panel-head">
+            <div className={ui.panel}>
+              <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
-                  <div className="schedule-panel-title">Appointment</div>
-                  <div className="schedule-panel-subtitle">{activeAppointment ? `#${activeAppointment.id}` : '-'}</div>
+                  <div className={ui.sectionTitle}>Appointment</div>
+                  <div className={ui.sectionSubtitle}>{activeAppointment ? `#${activeAppointment.id}` : '-'}</div>
                 </div>
               </div>
 
               {activeAppointment ? (
-                <div className="schedule-detail-list">
-                  <div>
-                    <span>Patient</span>
-                    <b>{activeAppointment.patientName || 'Unassigned'}</b>
-                  </div>
-                  <div>
-                    <span>Time</span>
-                    <b>{formatTime(activeAppointment.scheduledStart)} - {formatTime(activeAppointment.scheduledEnd)}</b>
-                  </div>
-                  <div>
-                    <span>Status</span>
-                    <b>{humanize(activeAppointment.status)}</b>
-                  </div>
-                  <div>
-                    <span>Provider</span>
-                    <b>{activeAppointment.providerName || '-'}</b>
-                  </div>
-                  <div>
-                    <span>Location</span>
-                    <b>{activeAppointment.locationName || '-'}</b>
-                  </div>
-                  <div>
-                    <span>Reason</span>
-                    <b>{activeAppointment.reason || '-'}</b>
-                  </div>
-                  <div>
-                    <span>Billing</span>
-                    <b>{activeAppointment.billingStatus ? humanize(activeAppointment.billingStatus) : 'No claim'}</b>
-                  </div>
+                <div className="grid gap-2.5">
+                  {[
+                    ['Patient', activeAppointment.patientName || 'Unassigned'],
+                    ['Time', `${formatTime(activeAppointment.scheduledStart)} - ${formatTime(activeAppointment.scheduledEnd)}`],
+                    ['Status', humanize(activeAppointment.status)],
+                    ['Provider', activeAppointment.providerName || '-'],
+                    ['Location', activeAppointment.locationName || '-'],
+                    ['Reason', activeAppointment.reason || '-'],
+                    ['Billing', activeAppointment.billingStatus ? humanize(activeAppointment.billingStatus) : 'No claim'],
+                  ].map(([label, value], index) => (
+                    <div
+                      key={label}
+                      className={cn(
+                        'grid gap-2 pt-2.5 [grid-template-columns:minmax(86px,0.65fr)_minmax(0,1fr)]',
+                        index === 0 ? 'border-t-0 pt-0' : 'border-t border-[#eef2f7]',
+                      )}
+                    >
+                      <span className="text-xs font-extrabold uppercase text-[#64748b]">{label}</span>
+                      <b className="min-w-0 font-bold text-mp-strong [overflow-wrap:anywhere]">{value}</b>
+                    </div>
+                  ))}
                 </div>
               ) : (
-                <div className="pa-empty">Select an appointment.</div>
+                <div className={ui.empty}>Select an appointment.</div>
               )}
             </div>
           </aside>
