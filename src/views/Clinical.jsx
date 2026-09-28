@@ -1244,7 +1244,7 @@ export default function Clinical() {
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
                               <div className="font-bold text-mp-strong">{form.formCode}</div>
-                              <div className="mt-1 text-xs text-[#64748b]">{[form.section, formatDateTime(form.updatedAt)].filter(Boolean).join(' | ')}</div>
+                              <div className="mt-1 text-xs text-[#64748b]">{formatDateTime(form.updatedAt)}</div>
                               <div className="mt-2 text-sm text-[#475569] [overflow-wrap:anywhere]">{form.dataPreview || 'No preview available.'}</div>
                             </div>
                             <StatusPill value={form.completed ? 'completed' : 'draft'} />

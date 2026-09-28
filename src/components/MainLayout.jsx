@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import logo from '../assets/mpointe-3.svg'
 import { clearSession } from '../services/session'
 
@@ -13,8 +13,16 @@ const NAV_ITEMS = [
   { key: 'settings', label: 'Settings', icon: SettingsIcon, disabled: true },
 ]
 
+const DASHBOARD_NAV_ITEMS = [
+  NAV_ITEMS[0], NAV_ITEMS[1], NAV_ITEMS[2], NAV_ITEMS[4], NAV_ITEMS[3],
+  { key: 'reports', label: 'Reports', icon: ReportsIcon, disabled: true },
+  NAV_ITEMS[6],
+]
+
 export default function MainLayout({ children }) {
-  const [isMenuOpen, setIsMenuOpen] = useState(true)
+  const location = useLocation()
+  const isDashboard = location.pathname === '/'
+  const [isMenuOpen, setIsMenuOpen] = useState(() => !isDashboard || window.innerWidth > 700)
   const navigate = useNavigate()
 
   function handleSignOut() {
@@ -23,11 +31,11 @@ export default function MainLayout({ children }) {
   }
 
   return (
-    <div className="mx-auto min-h-screen max-w-[1920px] overflow-x-hidden bg-mp-soft font-sans text-mp-text">
-      <header className="border-b-2 border-mp-line-strong bg-mp-soft px-4 py-4 md:px-8">
-        <div className="flex items-center gap-4">
+    <div className={`mx-auto min-h-screen max-w-[1920px] overflow-x-hidden font-sans text-mp-text ${isDashboard ? 'bg-[#f4f5fa]' : 'bg-mp-soft'}`}>
+      <header className={isDashboard ? 'flex h-[72px] items-center border-b border-[#c7d9e5] bg-[#f4f5fa] px-8' : 'border-b-2 border-mp-line-strong bg-mp-soft px-4 py-4 md:px-8'}>
+        <div className="flex w-full items-center gap-4">
           <button
-            className="group inline-flex h-14 w-14 shrink-0 flex-col items-center justify-center gap-[5px] rounded-full bg-white"
+            className={`group inline-flex h-14 w-14 shrink-0 flex-col items-center justify-center gap-[5px] rounded-full bg-white ${isDashboard ? 'min-[701px]:hidden' : ''}`}
             type="button"
             aria-label="Menu"
             aria-controls="main-navigation"
@@ -45,20 +53,20 @@ export default function MainLayout({ children }) {
             />
           </button>
 
-          <div className="max-w-[13rem]">
+          <div className={isDashboard ? 'max-w-40' : 'max-w-[13rem]'}>
             <NavLink to="/" aria-label="Dashboard">
               <img
                 src={logo}
                 loading="lazy"
                 alt="MedPointe"
-                className="w-[10rem] max-w-[42vw] md:w-[13rem]"
+                className={isDashboard ? 'w-40 max-w-[42vw]' : 'w-[10rem] max-w-[42vw] md:w-[13rem]'}
               />
             </NavLink>
           </div>
 
           <div className="ml-auto flex flex-1 justify-end">
             <button
-              className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-white text-[#353535] transition hover:text-mp-green"
+              className={`inline-flex items-center justify-center rounded-full bg-white text-[#353535] transition hover:text-mp-green ${isDashboard ? 'h-10 w-10' : 'h-12 w-12'}`}
               type="button"
               title="Sign out"
               onClick={handleSignOut}
@@ -76,19 +84,30 @@ export default function MainLayout({ children }) {
       </header>
 
       <section className="flex flex-col items-stretch md:flex-row">
+        {isDashboard && isMenuOpen ? (
+          <button
+            type="button"
+            className="fixed inset-x-0 bottom-0 top-[72px] z-40 bg-black/30 min-[701px]:hidden"
+            aria-label="Close menu"
+            onClick={() => setIsMenuOpen(false)}
+          />
+        ) : null}
         {isMenuOpen ? (
           <nav
             id="main-navigation"
-            className="bg-white px-5 py-2.5 md:w-[210px] md:shrink-0 md:self-stretch md:border-r md:border-mp-line-strong md:px-5 md:py-2.5 md:rounded-br-[20px] max-md:border-b max-md:border-mp-line-strong max-md:rounded-br-2xl"
+            className={isDashboard
+              ? 'bg-[#f4f5fa] py-4 pl-8 pr-[18px] md:w-[220px] md:shrink-0 md:self-stretch max-[700px]:fixed max-[700px]:bottom-0 max-[700px]:left-0 max-[700px]:top-[72px] max-[700px]:z-50 max-[700px]:w-[240px] max-[700px]:overflow-y-auto max-[700px]:border-r max-[700px]:border-[#c7d9e5] max-[700px]:shadow-xl'
+              : 'bg-white px-5 py-2.5 md:w-[210px] md:shrink-0 md:self-stretch md:border-r md:border-mp-line-strong md:px-5 md:py-2.5 md:rounded-br-[20px] max-md:border-b max-md:border-mp-line-strong max-md:rounded-br-2xl'}
             aria-label="Primary"
           >
             <div className="sticky top-3">
-              <div className="grid gap-1 max-md:grid-cols-2 max-[520px]:grid-cols-1">
-                {NAV_ITEMS.map((item) => (
+              <div className={`grid ${isDashboard ? 'gap-[7px] max-[700px]:grid-cols-1' : 'gap-1 max-md:grid-cols-2 max-[520px]:grid-cols-1'}`}>
+                {(isDashboard ? DASHBOARD_NAV_ITEMS : NAV_ITEMS).map((item) => (
                   <MenuItem
                     item={item}
                     key={item.key}
-                    onNavigate={() => setIsMenuOpen(false)}
+                    dashboardMode={isDashboard}
+                    onNavigate={() => { if (window.innerWidth <= 700) setIsMenuOpen(false) }}
                   />
                 ))}
               </div>
@@ -96,19 +115,21 @@ export default function MainLayout({ children }) {
           </nav>
         ) : null}
 
-        <main className="flex min-w-0 flex-1 gap-4 p-3 md:p-4">{children}</main>
+        <main className={isDashboard ? 'flex min-w-0 flex-1 p-3 md:py-0 md:pl-8 md:pr-0' : 'flex min-w-0 flex-1 gap-4 p-3 md:p-4'}>{children}</main>
       </section>
     </div>
   )
 }
 
-function MenuItem({ item, onNavigate }) {
+function MenuItem({ item, onNavigate, dashboardMode }) {
   const Icon = item.icon
 
   if (item.disabled) {
     return (
       <button
-        className="flex w-full cursor-default items-center gap-2.5 rounded-full bg-transparent px-3 py-2.5 text-left text-[0.95rem] font-medium leading-tight text-slate-400"
+        className={dashboardMode
+          ? 'flex min-h-[38px] w-full cursor-default items-center gap-2.5 rounded-lg border border-transparent bg-white px-3 py-2 text-left text-sm font-medium leading-tight text-[#425166]'
+          : 'flex w-full cursor-default items-center gap-2.5 rounded-full bg-transparent px-3 py-2.5 text-left text-[0.95rem] font-medium leading-tight text-slate-400'}
         type="button"
         aria-disabled="true"
         title="Module not migrated yet"
@@ -124,9 +145,13 @@ function MenuItem({ item, onNavigate }) {
   return (
     <NavLink
       className={({ isActive }) => [
-        'flex w-full items-center gap-2.5 rounded-full px-3 py-2.5 text-left text-[0.95rem] font-medium leading-tight transition',
-        'hover:bg-[#f1f3f6] hover:text-slate-700',
-        isActive ? 'bg-[#eef1f5] text-mp-blue-900' : 'bg-transparent text-slate-500',
+        dashboardMode
+          ? 'relative flex min-h-[38px] w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-sm font-medium leading-tight transition'
+          : 'flex w-full items-center gap-2.5 rounded-full px-3 py-2.5 text-left text-[0.95rem] font-medium leading-tight transition',
+        dashboardMode ? 'hover:border-[#a9c9f9] hover:text-[#184474]' : 'hover:bg-[#f1f3f6] hover:text-slate-700',
+        dashboardMode
+          ? (isActive ? 'border-[#a9c9f9] bg-[#f4f8ff] font-extrabold text-[#184474] before:absolute before:-left-8 before:top-0 before:h-full before:w-[6px] before:rounded-r-lg before:bg-[#4190f5]' : 'border-transparent bg-white text-[#425166]')
+          : (isActive ? 'bg-[#eef1f5] text-mp-blue-900' : 'bg-transparent text-slate-500'),
       ].join(' ')}
       end={item.to === '/'}
       to={item.to}
@@ -186,6 +211,15 @@ function ClinicalIcon() {
       <rect x="3" y="3" width="18" height="18" rx="3" />
       <line x1="12" y1="7" x2="12" y2="17" />
       <line x1="7" y1="12" x2="17" y2="12" />
+    </svg>
+  )
+}
+
+function ReportsIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="5" y="3" width="14" height="18" rx="2" />
+      <path d="M8 8h8M8 12h8M8 16h5" />
     </svg>
   )
 }

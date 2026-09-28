@@ -55,10 +55,14 @@ const employmentStatusOptions = [
 
 const communicationOptions = [
   { value: '', label: 'Select' },
-  { value: 'mobile', label: 'Mobile' },
+  { value: 'mobile', label: 'Cell phone' },
   { value: 'home_phone', label: 'Home phone' },
+  { value: 'work_phone', label: 'Work phone' },
   { value: 'email', label: 'Email' },
   { value: 'mail', label: 'Mail' },
+  { value: 'text', label: 'Text' },
+  { value: 'portal', label: 'Portal' },
+  { value: 'do_not_contact', label: 'Do not contact' },
 ]
 
 const emptyPatientForm = {

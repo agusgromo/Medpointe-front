@@ -1,71 +1,129 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import MainLayout from '../components/MainLayout'
-import { ui } from '../components/ui'
 import { getSchedule, getScheduleOptions } from '../services/schedule'
 import { getStoredSession } from '../services/session'
+import { getDashboardContext } from '../services/auth'
 
-const DASHBOARD_OFFICE_KEY = 'medpointe.dashboard.officeId'
+const OFFICE_STORAGE_KEY = 'medpointe.dashboard.officeId'
+const SCHEDULE_COLUMNS = 'grid-cols-[84px_72px_minmax(280px,1.25fr)_minmax(260px,1.45fr)_62px_62px]'
 
-function inputDate(value = new Date()) {
-  const date = new Date(value)
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
-  return local.toISOString().slice(0, 10)
+function localDate(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
 function displayDate(value) {
-  if (!value) {
-    return ''
-  }
-
-  return new Date(`${value}T12:00:00`).toLocaleDateString(undefined, {
-    weekday: 'long',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
+  return new Date(`${value}T12:00:00`).toLocaleDateString('en-US', {
+    month: 'long', day: 'numeric', year: 'numeric',
   })
 }
 
-function formatTime(value) {
-  if (!value) {
-    return ''
+function displayTime(value) {
+  return new Date(value).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    .replace(' AM', 'am').replace(' PM', 'pm')
+}
+
+function displayClockTime(value) {
+  return new Date(value).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+}
+
+function initials(name) {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean)
+  return `${parts[0]?.[0] || ''}${parts.length > 1 ? parts.at(-1)[0] : ''}`.toUpperCase()
+}
+
+function arrivalGlyph(row) {
+  const status = row.status
+  if (status === 'scheduled' && row.confirmedAt) {
+    return { character: '■', color: '#2ecc71', label: 'Confirmed' }
   }
-
-  return new Date(value).toLocaleTimeString(undefined, {
-    hour: 'numeric',
-    minute: '2-digit',
-  })
-}
-
-function statusTone(status) {
-  if (['checked_in', 'triage', 'with_provider', 'ready_checkout', 'checked_out', 'completed', 'paid'].includes(status)) {
-    return 'ok'
+  switch (status) {
+    case 'confirmed': return { character: '■', color: '#2ecc71', label: 'Confirmed' }
+    case 'checked_in':
+    case 'triage': return { character: '►', color: '#d99a00', label: 'Arrived / triage' }
+    case 'with_provider': return { character: '►', color: '#2ecc71', label: 'Provider stage' }
+    case 'nurse_order': return { character: '►', color: '#3498db', label: 'Nurse order' }
+    case 'ready_checkout': return { character: '►', color: '#e74c3c', label: 'Pending checkout' }
+    case 'checked_out':
+    case 'completed': return { character: '✓', color: '#9e9e9e', label: 'Checked out' }
+    case 'no_show': return { character: '✖', color: '#e74c3c', label: 'No show' }
+    case 'cancelled': return { character: '✖', color: '#9e9e9e', label: 'Canceled' }
+    default: return null
   }
+}
 
-  if (['cancelled', 'no_show', 'denied', 'voided'].includes(status)) {
-    return 'err'
+function visitGlyph(status) {
+  switch (status) {
+    case 'open': return { character: '◆', color: '#2ecc71', label: 'Open' }
+    case 'pending_signature': return { character: '◆', color: '#9e9e9e', label: 'Encounter closed / pending sign' }
+    case 'signed': return { character: '✓', color: '#000000', label: 'Signed' }
+    default: return null
   }
-
-  return 'warn'
 }
 
-function isPendingNote(row) {
-  return !row?.signedAt
-    && Boolean(row?.encounterClosedAt || ['ready_checkout', 'checked_out', 'completed'].includes(row?.status))
+function billingGlyph(status, stage) {
+  if (stage === 'closed') return { character: '✓', color: '#000000', label: 'Complete' }
+  switch (status) {
+    case 'draft': return { character: '●', color: '#3498db', label: 'Unposted' }
+    case 'ready_to_bill': return { character: '●', color: '#d99a00', label: 'Ready to bill' }
+    case 'submitted': return { character: '●', color: '#2ecc71', label: 'Submitted' }
+    case 'paid': return { character: '●', color: '#9e9e9e', label: 'Paid' }
+    case 'denied': return { character: '●', color: '#e74c3c', label: 'Denied' }
+    default: return null
+  }
 }
 
-function isBillingOpen(row) {
-  return Boolean(row?.billingStatus) && !['paid', 'voided'].includes(String(row.billingStatus).toLowerCase())
-}
-
-function StatusDot({ status }) {
+function StatusGlyph({ glyph }) {
   return (
-    <span
-      className={`inline-block h-3 w-3 rounded-full align-middle ${
-        status === 'ok' ? 'bg-emerald-500' : status === 'warn' ? 'bg-amber-500' : 'bg-red-500'
-      }`}
-      aria-hidden="true"
-    />
+    <span className="flex min-h-[30px] items-center justify-center" aria-label={glyph?.label} title={glyph?.label}>
+      {glyph ? <span className="text-[28px] leading-none font-extrabold" style={{ color: glyph.color }}>{glyph.character}</span> : null}
+    </span>
+  )
+}
+
+function DashboardIcon({ name }) {
+  const shared = {
+    className: 'h-[22px] w-[22px] fill-none stroke-current stroke-[2.15] [stroke-linecap:round] [stroke-linejoin:round]',
+    viewBox: '0 0 24 24',
+    'aria-hidden': true,
+  }
+
+  if (name === 'bell') return <svg {...shared}><path d="M7 10.2a5 5 0 0 1 10 0v3.9l1.8 2.9H5.2L7 14.1z" /><path d="M10 20h4" /></svg>
+  if (name === 'people') return <svg {...shared}><circle cx="9" cy="8.5" r="3.2" /><path d="M3.8 19a5.2 5.2 0 0 1 10.4 0M15 6.2a3 3 0 0 1 0 5.6M17 14.2a4.9 4.9 0 0 1 3.2 4.8" /></svg>
+  return <svg {...shared}><rect x="4.5" y="5.5" width="15" height="14" rx="2.2" /><path d="M8 3.8v4M16 3.8v4M4.5 10h15" /></svg>
+}
+
+function KpiCard({ value, label, icon, background }) {
+  return (
+    <article className="flex min-h-[68px] min-w-0 items-center gap-[16px] overflow-hidden rounded-full px-[16px] py-[10px] text-white shadow-[0_9px_18px_rgba(24,68,116,0.06)]" style={{ background }}>
+      <span className="grid h-[44px] w-[44px] shrink-0 place-items-center rounded-full bg-white" style={{ color: background }}><DashboardIcon name={icon} /></span>
+      <span className="grid min-w-0 gap-[3px]">
+        <strong className="text-[28px] leading-none font-extrabold tracking-tight">{value}</strong>
+        <small className="truncate text-[12.5px] leading-[1.2] font-extrabold">{label}</small>
+      </span>
+    </article>
+  )
+}
+
+function ScheduleRow({ row, onOpen }) {
+  const patientName = row.patientListName || row.patientName
+  return (
+    <button
+      type="button"
+      className={`grid min-h-[54px] w-full min-w-[980px] items-center gap-2 rounded-[5px] border border-[#dee5eb] bg-white px-[18px] text-left text-sm text-[#425166] hover:border-[#4190f5] hover:shadow-[0_0_0_3px_rgba(65,144,245,0.10)] focus-visible:border-[#4190f5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4190f5] ${SCHEDULE_COLUMNS}`}
+      onClick={() => onOpen(row)}
+      aria-label={`Open ${patientName || 'appointment'}`}
+    >
+      <span>{displayTime(row.scheduledStart)}</span>
+      <StatusGlyph glyph={arrivalGlyph(row)} />
+      <span className="flex min-w-0 items-center gap-[14px]">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#d9d9d9] text-xs font-extrabold text-[#184474]">{initials(patientName)}</span>
+        <span className="truncate">{patientName}</span>
+      </span>
+      <span className="truncate">{row.reason || ''}</span>
+      <StatusGlyph glyph={visitGlyph(row.clinicalNoteStatus)} />
+      <StatusGlyph glyph={billingGlyph(row.billingStatus, row.billingStage)} />
+    </button>
   )
 }
 
@@ -73,274 +131,160 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const session = getStoredSession()
   const [clockNow, setClockNow] = useState(() => new Date())
-  const [selectedDate, setSelectedDate] = useState(() => inputDate())
-  const [officeOptions, setOfficeOptions] = useState([])
+  const [selectedDate, setSelectedDate] = useState(() => localDate())
+  const [offices, setOffices] = useState([])
+  const [officesLoading, setOfficesLoading] = useState(true)
+  const [officeError, setOfficeError] = useState('')
+  const [providerName, setProviderName] = useState('')
   const [selectedOfficeId, setSelectedOfficeId] = useState('')
-  const [scheduleRows, setScheduleRows] = useState([])
+  const [appointments, setAppointments] = useState([])
+  const [scheduleError, setScheduleError] = useState('')
 
   useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      setClockNow(new Date())
-    }, 30000)
-
-    return () => window.clearInterval(intervalId)
+    const timer = window.setInterval(() => setClockNow(new Date()), 30000)
+    return () => window.clearInterval(timer)
   }, [])
 
   useEffect(() => {
-    async function loadOfficeOptions() {
+    let cancelled = false
+    async function loadOffices() {
       try {
-        const response = await getScheduleOptions()
-
-        if (response.status === 200 && response.data) {
-          const locations = Array.isArray(response.data.locations) ? response.data.locations : []
-          const storedOfficeId = localStorage.getItem(DASHBOARD_OFFICE_KEY) || ''
-          const preferredOfficeId = locations.find((location) => String(location.id) === storedOfficeId)?.id
-            ?? locations[0]?.id
-            ?? ''
-
-          setOfficeOptions(locations)
-          setSelectedOfficeId(preferredOfficeId ? String(preferredOfficeId) : '')
-        }
+        const [contextResult, optionsResult] = await Promise.allSettled([
+          getDashboardContext(), getScheduleOptions(),
+        ])
+        const context = contextResult.status === 'fulfilled' && contextResult.value.status === 200
+          ? contextResult.value.data : null
+        if (optionsResult.status === 'rejected') throw optionsResult.reason
+        const response = optionsResult.value
+        if (response.status !== 200) throw new Error('Unable to load offices')
+        const locations = Array.isArray(response.data?.locations) ? response.data.locations : []
+        if (cancelled) return
+        const stored = localStorage.getItem(OFFICE_STORAGE_KEY)
+        const preferred = locations.find((office) => String(office.id) === stored)
+          || locations.find((office) => office.id === context?.defaultLocationId)
+          || locations[0]
+        setProviderName(context?.providerName || '')
+        setOffices(locations)
+        setSelectedOfficeId(preferred ? String(preferred.id) : '')
+        setOfficeError(locations.length ? '' : 'No offices available.')
       } catch {
-        setOfficeOptions([])
-        setSelectedOfficeId('')
+        if (!cancelled) {
+          setOffices([])
+          setOfficeError('Unable to load offices.')
+        }
+      } finally {
+        if (!cancelled) setOfficesLoading(false)
       }
     }
-
-    loadOfficeOptions()
+    void loadOffices()
+    return () => { cancelled = true }
   }, [])
 
   useEffect(() => {
-    if (selectedOfficeId) {
-      localStorage.setItem(DASHBOARD_OFFICE_KEY, selectedOfficeId)
-    }
+    if (selectedOfficeId) localStorage.setItem(OFFICE_STORAGE_KEY, selectedOfficeId)
   }, [selectedOfficeId])
 
   useEffect(() => {
-    async function loadTodaySchedule() {
+    if (officesLoading || officeError) return undefined
+    let cancelled = false
+    async function loadSchedule() {
       try {
         const response = await getSchedule({
           date: selectedDate,
           locationId: selectedOfficeId || undefined,
         })
-
-        if (response.status === 200 && Array.isArray(response.data)) {
-          setScheduleRows(response.data)
-        } else {
-          setScheduleRows([])
-        }
+        if (cancelled) return
+        setAppointments(Array.isArray(response.data)
+          ? response.data.filter((row) => row.patientId && row.status !== 'voided')
+          : [])
+        setScheduleError('')
       } catch {
-        setScheduleRows([])
+        if (!cancelled) {
+          setAppointments([])
+          setScheduleError('Unable to load dashboard schedule.')
+        }
       }
     }
+    void loadSchedule()
+    return () => { cancelled = true }
+  }, [selectedDate, selectedOfficeId, officesLoading, officeError])
 
-    loadTodaySchedule()
-  }, [selectedDate, selectedOfficeId])
+  const notesPending = useMemo(() => appointments.filter((row) =>
+    row.clinicalNoteStatus === 'pending_signature'
+    || (!row.clinicalNoteStatus && row.encounterClosedAt && !row.signedAt)
+  ).length, [appointments])
 
-  const selectedOffice = officeOptions.find((office) => String(office.id) === String(selectedOfficeId))
-  const metrics = useMemo(() => ({
-    appointments: scheduleRows.length,
-    notesPending: scheduleRows.filter(isPendingNote).length,
-    billingOpen: scheduleRows.filter(isBillingOpen).length,
-  }), [scheduleRows])
+  function openAppointment(row) {
+    const params = new URLSearchParams({ patientId: String(row.patientId), appointmentId: String(row.id) })
+    navigate(`/clinical?${params}`)
+  }
 
   return (
     <MainLayout>
-      <div className="w-full flex-1 rounded-lg border-2 border-mp-line-strong p-4 max-[720px]:p-3">
-        <section id="DASHBOARD_ROOT" className="px-4 pb-3">
-          <div className="mb-2 flex items-center justify-between gap-4 max-[720px]:flex-col max-[720px]:items-start">
-            <div className="mr-auto flex items-baseline gap-2.5">
-              <h2 className="m-0 text-xl font-bold text-mp-strong">Dashboard</h2>
-              <div className="font-semibold text-mp-muted">Welcome, {session?.username || 'user'}</div>
+      <div className="min-h-[calc(100vh-104px)] min-w-0 flex-1 rounded-[15px] border border-[#c7d9e5] bg-white px-4 py-8 sm:px-6 lg:px-8">
+        <div className="grid min-w-0 gap-[26px]">
+          <header className="flex flex-wrap items-start justify-between gap-4">
+            <h1 className="m-0 text-xl leading-tight font-extrabold tracking-tight text-[#111827]">
+              Dashboard <span className="ml-2 text-[13px] font-extrabold tracking-normal text-[#425166]">Welcome, {providerName || session?.username || 'user'}!</span>
+            </h1>
+            <div className="flex flex-wrap items-center justify-end gap-[22px] max-[760px]:w-full max-[760px]:justify-start">
+              <label className="inline-flex items-center gap-2 text-[11px] font-extrabold text-[#111827]">
+                Office
+                <select
+                  className="min-h-9 max-w-[190px] rounded-md border border-[#c7d9e5] bg-white px-2 text-sm font-semibold text-[#184474]"
+                  value={selectedOfficeId}
+                  onChange={(event) => setSelectedOfficeId(event.target.value)}
+                  disabled={officesLoading || offices.length === 0}
+                  aria-label="Office"
+                >
+                  {offices.length === 0 ? <option value="">{officesLoading ? 'Loading offices...' : 'Offices unavailable'}</option> : null}
+                  {offices.map((office) => <option key={office.id} value={office.id}>{office.name}</option>)}
+                </select>
+              </label>
+              <label className="relative grid h-[50px] min-w-[200px] cursor-pointer grid-cols-[32px_1fr_18px] items-center gap-2.5 rounded-2xl border border-[#c7d9e5] bg-white px-3.5 py-1 text-[#184474] shadow-[0_1px_2px_rgba(24,68,116,0.05)] focus-within:ring-2 focus-within:ring-[#4190f5] max-[760px]:w-full">
+                <span className="grid h-8 w-8 place-items-center rounded-[9px] bg-[#eef6ff] text-[#4190f5]"><DashboardIcon name="calendar" /></span>
+                <span className="grid gap-px">
+                  <strong className="text-base leading-tight">{displayDate(selectedDate)}</strong>
+                  <small className="text-[11px] text-[#425166]">{displayClockTime(clockNow)}</small>
+                </span>
+                <span className="text-xs text-[#425166]" aria-hidden="true">▼</span>
+                <input
+                  type="date"
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                  value={selectedDate}
+                  onChange={(event) => { if (event.target.value) setSelectedDate(event.target.value) }}
+                  aria-label="Dashboard date"
+                />
+              </label>
             </div>
+          </header>
+          {officeError ? <p className="m-0 text-sm text-red-700" role="alert">{officeError}</p> : null}
 
-            <div className="flex items-center gap-3 max-[720px]:w-full max-[720px]:flex-col max-[720px]:items-stretch">
-              <div className="flex min-w-[230px] items-center gap-2.5 rounded-lg border border-[#e6eef8] bg-white px-3 py-2.5 shadow-[0_2px_10px_rgba(16,24,40,0.04)] max-[720px]:w-full max-[720px]:min-w-0">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#eef5ff] text-[#2563eb]">
-                  <svg
-                    className="h-5 w-5 fill-none stroke-current"
-                    viewBox="0 0 24 24"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path d="M4 7h16" />
-                    <path d="M7 3h10v18H7z" />
-                    <path d="M10 11h4" />
-                    <path d="M10 15h4" />
-                  </svg>
-                </div>
-                <label className="grid min-w-0 flex-1 gap-1">
-                  <span className="text-[11px] font-extrabold uppercase tracking-[0.02em] text-slate-500">Office</span>
-                  <select
-                    className="min-h-8 min-w-0 rounded-md border border-[#d9e2ea] bg-white px-2.5 py-1 text-sm font-semibold text-slate-900 outline-none"
-                    value={selectedOfficeId}
-                    onChange={(event) => setSelectedOfficeId(event.target.value)}
-                  >
-                    {officeOptions.map((office) => (
-                      <option key={office.id} value={office.id}>{office.name}</option>
-                    ))}
-                    {!officeOptions.length ? <option value="">No offices</option> : null}
-                  </select>
-                </label>
+          <section className="min-w-0 rounded-[15px] border border-[#c7d9e5] bg-white px-4 pt-[22px] pb-[31px] sm:px-8" aria-labelledby="overview-title">
+            <h2 id="overview-title" className="m-0 text-lg leading-8 font-extrabold tracking-tight text-[#184474]">Today&apos;s Overview</h2>
+            <div className="mt-6 grid grid-cols-1 gap-3.5 min-[1280px]:grid-cols-3 min-[761px]:max-[1279px]:grid-cols-2">
+              <KpiCard value={appointments.length} label="Today’s Appointments" icon="calendar" background="#4190f5" />
+              <KpiCard value={notesPending} label="Notes Pending" icon="bell" background="#1e68c5" />
+              <KpiCard value="—" label="Inbox Documents" icon="people" background="#184474" />
+            </div>
+          </section>
+
+          <section className="min-h-[358px] min-w-0 overflow-hidden rounded-[15px] border border-[#c7d9e5] bg-white px-3.5 pt-5 pb-3" aria-labelledby="schedule-title">
+            <h2 id="schedule-title" className="m-0 pb-2 text-lg leading-8 font-extrabold tracking-tight text-[#184474]">Today&apos;s Schedule</h2>
+            {scheduleError ? <p className="p-4 text-sm text-red-700" role="alert">{scheduleError}</p> : null}
+            <div className="w-full overflow-x-auto pb-1" role="table" aria-label="Today's Schedule">
+              <div className={`grid min-h-[34px] min-w-[980px] items-center gap-2 px-[18px] text-xs font-extrabold text-[#979797] ${SCHEDULE_COLUMNS}`} role="row">
+                {['Time', 'Arrival', 'Patient', 'Reason', 'Visit', 'Billing'].map((label) =>
+                  <span key={label} role="columnheader">{label}</span>
+                )}
               </div>
-
-              <div className="flex min-w-[250px] items-center gap-2.5 rounded-lg border border-[#e6eef8] bg-white px-3.5 py-3 shadow-[0_2px_10px_rgba(16,24,40,0.04)] max-[720px]:w-full max-[720px]:min-w-0">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#eaf2ff] text-[#2563eb]">
-                  <svg
-                    className="h-5 w-5 fill-none stroke-current"
-                    viewBox="0 0 24 24"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                  >
-                    <rect x="3" y="5" width="18" height="16" rx="3" />
-                    <line x1="3" y1="9" x2="21" y2="9" />
-                    <line x1="8" y1="3" x2="8" y2="7" />
-                    <line x1="16" y1="3" x2="16" y2="7" />
-                  </svg>
-                </div>
-                <label className="grid min-w-0 flex-1 gap-1">
-                  <span className="text-[11px] font-extrabold uppercase tracking-[0.02em] text-slate-500">Schedule Date</span>
-                  <input
-                    className="min-h-8 min-w-0 rounded-md border border-[#d9e2ea] bg-white px-2.5 py-1 text-sm font-semibold text-slate-900 outline-none"
-                    type="date"
-                    value={selectedDate}
-                    onChange={(event) => setSelectedDate(event.target.value)}
-                  />
-                  <span className="truncate text-xs text-slate-600">{displayDate(selectedDate)}</span>
-                </label>
-                <div className="leading-[1.1] text-right">
-                  <div className="text-[11px] font-extrabold uppercase tracking-[0.02em] text-slate-500">Now</div>
-                  <div className="mt-1 flex items-center justify-end gap-1.5 text-sm font-bold text-slate-900">
-                    <svg
-                      className="h-3.5 w-3.5 fill-none stroke-slate-500"
-                      viewBox="0 0 24 24"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
-                    >
-                      <circle cx="12" cy="12" r="9" />
-                      <path d="M12 7v5l3 2" />
-                    </svg>
-                    {clockNow.toLocaleTimeString(undefined, {
-                      hour: 'numeric',
-                      minute: '2-digit',
-                    })}
-                  </div>
-                </div>
+              <div className="max-h-[min(47vh,360px)] min-w-[980px] space-y-[7px] overflow-y-auto pr-1" role="rowgroup">
+                {appointments.map((row) => <ScheduleRow key={row.id} row={row} onOpen={openAppointment} />)}
+                {!appointments.length && !scheduleError ? <div className="rounded-md border border-[#c7d9e5] p-5 text-sm text-[#425166]">No appointments to show.</div> : null}
               </div>
             </div>
-          </div>
-
-          <div className="mt-[2vh] mb-[4vh] grid w-full grid-cols-3 gap-4 max-[1200px]:grid-cols-2 max-[720px]:grid-cols-1">
-            <div className="flex h-24 w-full min-w-0 items-center rounded-full bg-[#4190f5] px-5 py-3.5 text-white shadow-[0_4px_14px_rgba(16,24,40,0.08)]">
-              <div className="mr-4 flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-white">
-                <svg className="h-[30px] w-[30px] fill-none stroke-[#4190f5]" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <rect x="3" y="5" width="18" height="16" rx="3" />
-                  <line x1="3" y1="9" x2="21" y2="9" />
-                  <line x1="8" y1="3" x2="8" y2="7" />
-                  <line x1="16" y1="3" x2="16" y2="7" />
-                </svg>
-              </div>
-              <div>
-                <div className="text-[32px] font-extrabold leading-none">{metrics.appointments}</div>
-                <div className="mt-1 text-[13px]">Appointments</div>
-              </div>
-            </div>
-
-            <div className="flex h-24 w-full min-w-0 items-center rounded-full bg-[#1e68c5] px-5 py-3.5 text-white shadow-[0_4px_14px_rgba(16,24,40,0.08)]">
-              <div className="mr-4 flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-white">
-                <svg className="h-[30px] w-[30px] fill-none stroke-[#1e68c5]" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M6 17h12l-1-2v-5a5 5 0 0 0-10 0v5l-1 2z" />
-                  <path d="M9 17a3 3 0 0 0 6 0" />
-                </svg>
-              </div>
-              <div>
-                <div className="text-[32px] font-extrabold leading-none">{metrics.notesPending}</div>
-                <div className="mt-1 text-[13px]">Notes Pending</div>
-              </div>
-            </div>
-
-            <div className="flex h-24 w-full min-w-0 items-center rounded-full bg-[#184474] px-5 py-3.5 text-white shadow-[0_4px_14px_rgba(16,24,40,0.08)]">
-              <div className="mr-4 flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-white">
-                <svg className="h-[30px] w-[30px] fill-none stroke-[#184474]" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" />
-                  <circle cx="9" cy="7" r="4" />
-                  <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                </svg>
-              </div>
-              <div>
-                <div className="text-[32px] font-extrabold leading-none">{metrics.billingOpen}</div>
-                <div className="mt-1 text-[13px]">Billing Open</div>
-              </div>
-            </div>
-          </div>
-
-          <div id="dash-sched" className="rounded-lg border border-mp-line bg-white p-3.5">
-            <div className="mt-2.5 mb-2.5 flex items-center justify-between gap-3">
-              <div>
-                <div className="font-semibold text-mp-strong">Schedule</div>
-                <div className="text-xs font-semibold text-mp-muted">
-                  {scheduleRows.length} {scheduleRows.length === 1 ? 'appointment' : 'appointments'}
-                </div>
-              </div>
-              <div className="text-xs font-semibold text-mp-muted text-right">
-                {selectedOffice?.name || 'Office'}
-              </div>
-            </div>
-
-            <div className="overflow-hidden rounded-lg border border-mp-line bg-white max-[720px]:overflow-x-auto">
-              <div className="grid grid-cols-[80px_28px_40px_minmax(150px,1.2fr)_minmax(220px,2fr)_28px_28px] items-center gap-x-3 bg-gray-100 py-1.5 pr-[31px] pl-2 text-xs font-semibold text-slate-900 max-[720px]:min-w-[760px]">
-                <div className="min-w-0 py-1.5 text-center">Time</div>
-                <div className="flex min-w-0 justify-center py-1.5 text-center">Arrival</div>
-                <div className="min-w-0 py-1.5 text-center" />
-                <div className="min-w-0 py-1.5 font-medium">Patient</div>
-                <div className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap py-1.5 text-xs text-gray-600">Reason</div>
-                <div className="flex min-w-0 justify-center py-1.5 text-center">Visit</div>
-                <div className="flex min-w-0 justify-center py-1.5 text-center">Billing</div>
-              </div>
-
-              <div className="max-h-[420px] overflow-auto">
-                {scheduleRows.map((row, index) => (
-                  <button
-                    type="button"
-                    className={`grid w-full cursor-pointer grid-cols-[80px_28px_40px_minmax(150px,1.2fr)_minmax(220px,2fr)_28px_28px] items-center gap-x-3 border-t border-[#eef2f7] p-2 text-left hover:bg-[#eef5ff] disabled:cursor-default disabled:hover:bg-white max-[720px]:min-w-[760px] ${
-                      index === 0 ? 'bg-[#ffe6ef]' : 'bg-white'
-                    }`}
-                    disabled={!row.patientId}
-                    key={row.id}
-                    onClick={() => navigate(`/patient-activity?patientId=${row.patientId}`)}
-                  >
-                    <div className="min-w-0 py-1.5 text-center">{formatTime(row.scheduledStart)}</div>
-                    <div className="flex min-w-0 justify-center py-1.5 text-center">
-                      <StatusDot status={statusTone(row.status)} />
-                    </div>
-                    <div className="min-w-0 py-1.5 text-center">
-                      <span className="mx-auto block h-8 w-8 rounded-full bg-gray-100 object-cover" />
-                    </div>
-                    <div className="min-w-0 py-1.5 font-medium">{row.patientName || 'Unassigned'}</div>
-                    <div className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap py-1.5 text-xs text-gray-600">{row.reason || row.appointmentTypeName || '-'}</div>
-                    <div className="flex min-w-0 justify-center py-1.5 text-center">
-                      <StatusDot status={statusTone(row.status)} />
-                    </div>
-                    <div className="flex min-w-0 justify-center py-1.5 text-center">
-                      <StatusDot status={row.billingStatus ? statusTone(row.billingStatus) : 'warn'} />
-                    </div>
-                  </button>
-                ))}
-
-                {scheduleRows.length === 0 ? (
-                  <div className={ui.empty}>No appointments scheduled.</div>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        </section>
+          </section>
+        </div>
       </div>
     </MainLayout>
   )
